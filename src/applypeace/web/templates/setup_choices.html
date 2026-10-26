@@ -21,6 +21,10 @@
 <label class="choice"><input type="checkbox" name="h1b_filter" value="yes" {{ 'checked' if settings.h1b_filter }}>
 <span>Only show US jobs at employers with an H-1B record <span class="hint">and skip postings that say they won't sponsor.</span></span></label>
 
+<h2>Acknowledgements</h2>
+<label class="choice"><input type="checkbox" name="auto_acknowledge" value="yes" {{ 'checked' if ans.auto_acknowledge }}>
+<span>Tick standard "I agree / I have read" boxes for me <span class="hint">such as privacy notices and data-processing or arbitration acknowledgements, only where the box is the single option. You still see every one in review.</span></span></label>
+
 <h2>Backup</h2>
 <label class="choice"><input type="checkbox" name="backup" value="yes" {{ 'checked' if settings.backup_requested }}>
 <span>Back up my data to a private GitHub repo <span class="hint">Your data is always versioned locally. A backup is only created after you confirm it separately.</span></span></label>

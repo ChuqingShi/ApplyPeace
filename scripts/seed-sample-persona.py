@@ -30,7 +30,8 @@ config.save_yaml(p.profile, {
 answers = profile.load_answers(p)
 answers.update(work_authorized_us=True, needs_sponsorship_now=False, needs_sponsorship_future=True,
                visa_status="F-1 STEM OPT", willing_to_relocate=True, salary_expectation="$110,000",
-               earliest_start_date="Two weeks after offer")
+               earliest_start_date="Two weeks after offer", over_18=True,
+               languages=["English", "Spanish"], auto_acknowledge=True)
 config.save_yaml(p.answers, answers)
 settings = config.load_settings(p)
 settings["targets"].update(titles=["Data Analyst", "Analytics Engineer", "Business Analyst", "Product Analyst",

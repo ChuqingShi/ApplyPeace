@@ -1,0 +1,88 @@
+{% extends "base.html" %}{% set title = job.title %}
+{% block body %}
+<p><a href="/">← Back</a></p>
+<h1>{{ job.title }}</h1>
+<p class="muted">{{ company }} · {{ job.location or '' }} · <a href="{{ job.url }}" target="_blank" rel="noopener">original posting</a><br>
+H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif %} · status: {{ job.status }}</p>
+{% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
+
+{% if application %}
+<div class="card"><strong>Application: {{ application.status }}</strong> <span class="muted">{{ application.finished_at or '' }}</span><br>
+<span class="muted">{{ application.detail or '' }}</span><br>
+{% if application.screenshot_before %}<a href="/artifacts/{{ job.id }}/filled.png">Filled form</a>{% endif %}
+{% if application.screenshot_after %} · <a href="/artifacts/{{ job.id }}/confirmation.png">Confirmation</a>{% endif %}
+ · <a href="/artifacts/{{ job.id }}/answers.json">Answers sent</a> · <a href="/artifacts/{{ job.id }}/job_description.txt">Job description</a>
+{% if job.status == 'needs_code' %}
+<form method="post" action="/jobs/{{ job.id }}/code"><input type="hidden" name="_token" value="{{ token }}">
+<label>Code from the email</label><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required>
+<button type="submit">Send code</button></form>
+{% elif job.status == 'needs_you' %}
+<p>Finish this one yourself: open the <a href="{{ job.url }}" target="_blank" rel="noopener">posting</a>, copy the answers below, then tell ApplyPeace what happened.</p>
+<form method="post" action="/jobs/{{ job.id }}/done" class="row"><input type="hidden" name="_token" value="{{ token }}">
+<button name="submitted" value="yes">I submitted it</button><button class="secondary" name="submitted" value="no">Give up</button></form>
+{% elif job.status == 'submitted' %}
+<form method="post" action="/jobs/{{ job.id }}/outcome" class="row"><input type="hidden" name="_token" value="{{ token }}">
+<select name="outcome"><option value="interview">Interview</option><option value="rejected">Rejected by company</option><option value="offer">Offer</option><option value="no_reply">No reply</option></select>
+<button class="secondary" type="submit">Update outcome</button></form>
+{% endif %}
+</div>
+{% endif %}
+
+{% if judge %}
+<div class="card"><strong>AI assessment: {{ judge.score }}/5 · {{ judge.recommendation|upper }}</strong>
+<h3>Why this job</h3><ul class="plain">{% for r in judge.reasons %}<li>{{ r.point }}<br><span class="muted">“{{ r.resume_quote }}”</span></li>{% endfor %}</ul>
+{% if judge.concerns %}<h3>Concerns</h3><ul class="plain">{% for c in judge.concerns %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+{% if judge.sponsorship_clues %}<p class="muted">Sponsorship: {{ judge.sponsorship_clues }}</p>{% endif %}
+</div>
+{% endif %}
+<details><summary>Job description</summary><p style="white-space:pre-wrap">{{ summary }}…</p></details>
+
+{% if job.status in ('candidate', 'skipped', 'rejected') %}
+<form method="post" action="/jobs/{{ job.id }}/restore"><input type="hidden" name="_token" value="{{ token }}">
+<button type="submit">Bring back for review</button></form>
+{% endif %}
+
+{% if rows %}
+<form method="post" action="/jobs/{{ job.id }}/save" id="answers">
+<input type="hidden" name="_token" value="{{ token }}">
+{% if approved %}<div class="card {{ 'ok' if lock_ok else 'warn' }}">Approved {{ approved.approved_at[:16] }}. Changing anything sends it back to review.</div>{% endif %}
+<label>Resume to send</label>
+<select name="resume_key">{% for r in resumes %}<option value="{{ r.key }}" {{ 'selected' if r.key == job.resume_key }}>{{ r.label }}</option>{% endfor %}</select>
+<h2>Questions <span class="muted">({{ rows|length }})</span></h2>
+{% for r in rows %}
+<div class="q {{ 'missing' if r.field in missing }}" id="f-{{ r.field }}">
+<label>{{ r.label }}{% if r.required %} <span class="bad">*</span>{% endif %}
+<span class="hint">{{ {'profile':'from profile','answers':'standard answer','saved':'your saved default','llm':'AI draft','user':'you','consent':'acknowledged (your setup choice)','none':''}[r.source] }}</span></label>
+{% set name = 'f__' ~ r.field %}
+{% if r.kind == 'file' %}<p class="muted">Your resume is attached.</p>
+{% elif r.kind == 'textarea' %}<textarea name="{{ name }}" rows="6">{{ r.value or '' }}</textarea>
+{% elif r.kind == 'multiselect' %}{% for o in r.options %}<label class="choice"><input type="checkbox" name="{{ name }}" value="{{ o.value }}" {{ 'checked' if is_selected(r, o.value) }}> {{ o.label }}</label>{% endfor %}
+{% elif r.options %}<select name="{{ name }}"><option value="">Choose…</option>{% for o in r.options %}<option value="{{ o.value }}" {{ 'selected' if is_selected(r, o.value) }}>{{ o.label }}</option>{% endfor %}</select>
+{% elif r.kind == 'boolean' %}<select name="{{ name }}"><option value="">Choose…</option><option value="true" {{ 'selected' if r.value == true }}>Yes</option><option value="false" {{ 'selected' if r.value == false }}>No</option></select>
+{% else %}<input type="text" name="{{ name }}" value="{{ r.value or '' }}">{% endif %}
+{% if r.kind != 'file' %}<label class="small"><input type="checkbox" name="default__{{ r.field }}" value="1"> Save as my default answer</label>{% endif %}
+</div>
+{% endfor %}
+<div class="bar"><div class="inner">
+<button class="secondary" name="action" value="save" type="submit">Save</button>
+<button name="action" value="approve" type="submit">Approve</button></div></div>
+</form>
+
+{% for r in rows if r.kind == 'textarea' %}
+<form method="post" action="/jobs/{{ job.id }}/redraft" class="card"><input type="hidden" name="_token" value="{{ token }}">
+<input type="hidden" name="field" value="{{ r.field }}">
+<label>Redraft: {{ r.label[:80] }}</label>
+<input type="text" name="instruction" placeholder='e.g. "shorter, mention my SQL project"'>
+<button class="secondary" type="submit">Redraft with AI</button></form>
+{% endfor %}
+
+<div class="row">
+<form method="post" action="/jobs/{{ job.id }}/skip"><input type="hidden" name="_token" value="{{ token }}"><button class="secondary" type="submit">Skip for now</button></form>
+</div>
+<form method="post" action="/jobs/{{ job.id }}/reject" class="card"><input type="hidden" name="_token" value="{{ token }}">
+<label>Reject because <span class="hint">helps the picker learn your taste</span></label>
+<select name="reason">{% for k, v in reasons.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+<label class="choice"><input type="checkbox" name="block" value="yes"> Never show this company again</label>
+<button class="secondary" type="submit">Reject</button></form>
+{% endif %}
+{% endblock %}

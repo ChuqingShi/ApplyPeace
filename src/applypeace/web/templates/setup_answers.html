@@ -13,6 +13,9 @@
 <label>Will you need sponsorship in the future?</label>{{ yesno("needs_sponsorship_future", ans.needs_sponsorship_future) }}
 <label>Current visa status <span class="hint">e.g. F-1 OPT, STEM OPT, H-1B; leave blank if not applicable</span></label>
 <input type="text" name="visa_status" value="{{ ans.visa_status }}">
+<label>Are you 18 or older?</label>{{ yesno("over_18", ans.over_18) }}
+<label>Languages you speak fluently <span class="hint">comma separated</span></label>
+<input type="text" name="languages" value="{{ ans.languages | join(', ') }}">
 <label>Willing to relocate?</label>{{ yesno("willing_to_relocate", ans.willing_to_relocate) }}
 <label>Relocation notes <span class="hint">optional, e.g. "anywhere in the US"</span></label><input type="text" name="relocation_notes" value="{{ ans.relocation_notes }}">
 <label>Salary expectation <span class="hint">e.g. "$120,000" or "open"</span></label><input type="text" name="salary_expectation" value="{{ ans.salary_expectation }}">

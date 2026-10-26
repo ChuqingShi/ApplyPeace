@@ -94,7 +94,9 @@ DEFAULT_SETTINGS: dict = {
     "scan_interval_hours": 8,
     "max_posting_age_days": 30,
     "llm": {"consent": False, "judge_daily_limit": 30},
-    "submit_mode": "fill_only",  # fill_only | auto
+    "submit_mode": "fill_only",  # fill_only (dry run, nothing sent) | auto
+    "paused": False,
+    "apply_gap_seconds": 150,
     "targets": {"titles": [], "exclude_titles": [], "locations": [], "remote_ok": True},
     "setup_complete": False,
 }

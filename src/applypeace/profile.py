@@ -33,6 +33,9 @@ ANSWERS_TEMPLATE: dict = {
     "relocation_notes": "",
     "salary_expectation": "",
     "earliest_start_date": "",
+    "over_18": None,
+    "languages": ["English"],
+    "auto_acknowledge": False,         # tick single "I agree / I have read" boxes (opt-in at setup)
     "eeo": {"gender": "decline", "race": "decline", "hispanic_latino": "decline",
             "veteran": "decline", "disability": "decline"},
     "saved": [],  # defaults you saved during review: {question, answer}

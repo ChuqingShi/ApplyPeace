@@ -51,7 +51,7 @@ def test_full_setup_without_llm(client):
                                    "email": "alex.rivera@example.com", "phone": "(555) 010-2030",
                                    "skills": "SQL, Python"})
     c.post("/setup/answers", data={"_token": t, "work_authorized_us": "yes", "needs_sponsorship_now": "no",
-                                   "needs_sponsorship_future": "yes", "willing_to_relocate": "yes",
+                                   "needs_sponsorship_future": "yes", "willing_to_relocate": "yes", "over_18": "yes",
                                    "visa_status": "F-1 STEM OPT"})
     ans = profile.load_answers(p)
     assert ans["needs_sponsorship_future"] is True and ans["eeo"]["gender"] == "decline"
@@ -66,7 +66,7 @@ def test_full_setup_without_llm(client):
 
     assert profile.completeness(p) == ["finish setup (review and confirm)"]
     r = c.post("/setup/finish", data={"_token": t})
-    assert r.status_code == 200 and "Setup is complete" in r.text
+    assert r.status_code == 200 and "Today's batch" in r.text
     assert profile.completeness(p) == []
 
     log = __import__("subprocess").run(["git", "-C", str(p.home), "log", "--oneline"], capture_output=True, text=True).stdout

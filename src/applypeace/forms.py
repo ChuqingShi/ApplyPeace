@@ -58,9 +58,14 @@ def greenhouse_questions(client: httpx.Client, board: str, job_id: str) -> list[
         out.append(Question(primary["name"], html.unescape(q["label"]).strip(), kind, bool(q.get("required")),
                             options, "standard" if primary["name"] in GH_STANDARD else "custom"))
     for q in data.get("location_questions") or []:
-        f = (q.get("fields") or [{}])[0]
-        out.append(Question(f.get("name", "location"), q.get("label", "Location"), "location", bool(q.get("required")),
-                            section="standard"))
+        # The location question comes with hidden latitude/longitude helpers the page fills itself.
+        for f in q.get("fields") or []:
+            if f.get("type") == "input_hidden" or f.get("name") in ("latitude", "longitude"):
+                continue
+            if q.get("label", "").lower() in ("latitude", "longitude"):
+                continue
+            out.append(Question(f.get("name", "location"), q.get("label", "Location"), "location",
+                                bool(q.get("required")), section="standard"))
     for block in data.get("compliance") or []:
         for q in block.get("questions", []):
             for f in q.get("fields", []):
@@ -113,7 +118,10 @@ def ashby_questions(client: httpx.Client, board: str, job_id: str) -> list[Quest
                 path = f["path"]
                 options = [{"label": v.get("label", ""), "value": v.get("value", v.get("label", ""))}
                            for v in f.get("selectableValues") or []]
-                out.append(Question(path, (f.get("title") or path).strip(), ASHBY_KINDS.get(f.get("type"), "text"),
+                title = (f.get("title") or "").strip()
+                if not title or title == path:
+                    title = "Consent to data processing (privacy notice)" if "consent" in path else path.replace("_systemfield_", "").replace("_", " ").capitalize()
+                out.append(Question(path, title, ASHBY_KINDS.get(f.get("type"), "text"),
                                     bool(entry.get("isRequired")), options,
                                     "eeo" if form_index > 0 else ("standard" if path.startswith("_systemfield_") else "custom")))
     return out

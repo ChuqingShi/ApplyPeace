@@ -196,6 +196,12 @@ def cmd_doctor(args, p: config.Paths) -> int:
         _out("No company lists imported yet: run `ap lists update`.")
     from .browser import check_browser
 
+    from . import h1b
+
+    if not h1b.default_db().exists():
+        _out("H-1B data: not loaded (run `ap h1b update`); the H-1B filter falls back to job-text checks.")
+    else:
+        _out(f"H-1B data: {h1b.default_db()}")
     browser_ok, detail = check_browser()
     ok &= browser_ok
     _out(f"Browser: {detail}")
@@ -264,11 +270,203 @@ def cmd_setup(args, p: config.Paths) -> int:
 
 
 def cmd_serve(args, p: config.Paths) -> int:
+    if args.background:
+        from .schedule import serve_background
+
+        _out(serve_background(p, args.port))
+        return 0
     import uvicorn
 
     from .web.app import create_app
 
     uvicorn.run(create_app(p), host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
+# ---------------------------------------------------------------- scheduled steps
+
+
+def _scheduled(step: str, fn, p: config.Paths) -> int:
+    from .pipeline import SetupIncomplete, single_run
+
+    with single_run(p, step) as acquired:
+        if not acquired:
+            _out(f"{step} is already running.")
+            return 0
+        try:
+            fn()
+        except SetupIncomplete as exc:
+            _out(str(exc))
+            return 1
+    return 0
+
+
+def cmd_cycle(args, p: config.Paths) -> int:
+    from .pipeline import cycle
+
+    return _scheduled("cycle", lambda: cycle(p, log=_out), p)
+
+
+def cmd_digest(args, p: config.Paths) -> int:
+    from .pipeline import digest
+
+    return _scheduled("digest", lambda: _out(digest(p, force=args.force) or "Nothing to send."), p)
+
+
+def cmd_apply(args, p: config.Paths) -> int:
+    from .pipeline import apply_step
+
+    return _scheduled("apply", lambda: _out(str(apply_step(p, max_jobs=args.max, log=_out))), p)
+
+
+# ---------------------------------------------------------------- review from the terminal or chat
+
+
+def cmd_queue(args, p: config.Paths) -> int:
+    import json
+
+    from . import answers as ans
+
+    names = {c["key"]: c["name"] for c in reg.load(p).values()}
+    with connect(p.db) as conn:
+        rows = conn.execute(
+            "SELECT * FROM jobs WHERE status IN ('queued','approved','needs_you','needs_code','skipped')"
+            " ORDER BY status, final_score DESC").fetchall()
+        if not rows:
+            _out("Nothing to review.")
+        for j in rows:
+            verdict = json.loads(j["judge"]) if j["judge"] else {}
+            missing = len(ans.missing_required(ans.load(conn, j["id"])))
+            _out(f"[{j['status']:10s}] {j['id']}")
+            _out(f"    {j['title']} · {names.get(j['company_key'], j['company_key'])} · {j['location'] or ''}"
+                 + (f" · AI {verdict['score']}/5 {verdict['recommendation']}" if verdict else "")
+                 + (f" · {missing} question(s) for you" if missing else ""))
+    return 0
+
+
+def cmd_show(args, p: config.Paths) -> int:
+    from . import answers as ans
+
+    with connect(p.db) as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id=?", (args.job,)).fetchone()
+        if not job:
+            _out("No such job.")
+            return 2
+        _out(f"{job['title']} ({job['status']})\n{job['url']}\n")
+        for r in ans.load(conn, args.job):
+            value = r["value"]
+            if r["options"] and value is not None:
+                labels = {str(o["value"]): o["label"] for o in r["options"]}
+                value = [labels.get(str(v), v) for v in value] if isinstance(value, list) else labels.get(str(value), value)
+            flag = "*" if r["required"] else " "
+            _out(f" {flag} {r['field']}\n     {r['label'][:110]}\n     = {value!r}  [{r['source']}]"
+                 + (f"\n     options: {[o['label'] for o in r['options']][:8]}" if r["options"] and value is None else ""))
+    return 0
+
+
+def cmd_set(args, p: config.Paths) -> int:
+    from . import answers as ans
+    from . import review
+
+    with connect(p.db) as conn:
+        row = next((r for r in ans.load(conn, args.job) if r["field"] == args.field), None)
+        if not row:
+            _out("No such question on that job.")
+            return 2
+        value = args.value
+        if row["options"]:  # accept the visible option text
+            match = next((o["value"] for o in row["options"] if o["label"].lower() == value.lower()), None) \
+                or next((o["value"] for o in row["options"] if value.lower() in o["label"].lower()), None)
+            if match is None:
+                _out(f"Not an option. Choose from: {[o['label'] for o in row['options']]}")
+                return 2
+            value = [match] if row["kind"] == "multiselect" else match
+        elif row["kind"] == "boolean":
+            value = value.lower() in ("yes", "true", "y")
+        review.set_answers(p, conn, args.job, {args.field: value}, {args.field} if args.default else set())
+    _out("Saved" + (" (and as your default)" if args.default else "") + ".")
+    return 0
+
+
+def cmd_approve(args, p: config.Paths) -> int:
+    from . import review
+    from .approval import approve
+
+    with connect(p.db) as conn:
+        if args.job == "all":
+            _out(f"Approved {review.approve_ready(p, conn)} ready jobs.")
+            return 0
+        try:
+            approve(p, conn, args.job)
+        except ValueError as exc:
+            _out(str(exc))
+            return 1
+    _out("Approved.")
+    return 0
+
+
+def cmd_reject(args, p: config.Paths) -> int:
+    from . import review
+
+    with connect(p.db) as conn:
+        review.reject(p, conn, args.job, args.reason, args.block)
+    _out("Rejected.")
+    return 0
+
+
+def cmd_skip(args, p: config.Paths) -> int:
+    from . import review
+
+    with connect(p.db) as conn:
+        review.skip(conn, args.job)
+    _out("Kept for later.")
+    return 0
+
+
+def cmd_pause(args, p: config.Paths) -> int:
+    settings = config.load_settings(p)
+    settings["paused"] = args.command == "pause"
+    config.save_settings(settings, p)
+    _out("Paused: nothing will be submitted." if settings["paused"] else "Resumed.")
+    return 0
+
+
+def cmd_schedule(args, p: config.Paths) -> int:
+    from . import schedule
+
+    if args.command == "show":
+        for r in schedule.routines(p, args.port):
+            when = f"every {r['interval'] // 60} min" if r["type"] == "interval" else f"daily at {r['time']} {r['timezone']}"
+            _out(f"{r['name']:20s} {when:28s} {r['command']}")
+        return 0
+    lines = schedule.install(p, args.port) if args.command == "install" else schedule.remove()
+    for line in lines:
+        _out(line)
+    return 0
+
+
+def cmd_publish(args, p: config.Paths) -> int:
+    import re
+    import subprocess
+
+    from .schedule import serve_background
+
+    _out(serve_background(p, args.port))
+    proc = subprocess.run(["openbase-coder", "service", "publish", args.name, str(args.port)], capture_output=True, text=True)
+    url = re.search(r"https://\S+", proc.stdout + proc.stderr)
+    if proc.returncode != 0 or not url:
+        _out("Publishing failed:\n" + (proc.stdout + proc.stderr).strip())
+        return 1
+    settings = config.load_settings(p)
+    settings["review_url"] = url.group(0).rstrip("/.")
+    config.save_settings(settings, p)
+    _out(f"Phone page: {settings['review_url']} (private to your devices on Openbase VPN)")
+    from .notify import notify
+    from .profile import completeness
+
+    if completeness(p):  # first start: the product asks you for your details itself
+        notify("Welcome to ApplyPeace: let's set up your profile.", open_url=settings["review_url"] + "/setup")
+        _out("Sent the setup invitation to your phone.")
     return 0
 
 
@@ -318,13 +516,53 @@ def build_parser() -> argparse.ArgumentParser:
     hs.add_argument("--port", type=int, default=8766)
     hs.set_defaults(func=cmd_h1b_serve)
 
+    sub.add_parser("cycle", help="scan, rank and prepare the review batch (scheduled every 8 h)").set_defaults(func=cmd_cycle)
+    dg = sub.add_parser("digest", help="send the daily 'batch ready' notification")
+    dg.add_argument("--force", action="store_true")
+    dg.set_defaults(func=cmd_digest)
+    ap_ = sub.add_parser("apply", help="send approved applications (scheduled every few minutes)")
+    ap_.add_argument("--max", type=int, default=1)
+    ap_.set_defaults(func=cmd_apply)
+    sub.add_parser("queue", help="jobs waiting for review or action").set_defaults(func=cmd_queue)
+    sh = sub.add_parser("show", help="a job's questions and drafted answers")
+    sh.add_argument("job")
+    sh.set_defaults(func=cmd_show)
+    st = sub.add_parser("set", help="change one answer (option text is fine)")
+    st.add_argument("job")
+    st.add_argument("field")
+    st.add_argument("value")
+    st.add_argument("--default", action="store_true", help="also save as your default answer")
+    st.set_defaults(func=cmd_set)
+    apr = sub.add_parser("approve", help="approve a job, or 'all' for every ready job")
+    apr.add_argument("job")
+    apr.set_defaults(func=cmd_approve)
+    rj = sub.add_parser("reject", help="reject a job")
+    rj.add_argument("job")
+    rj.add_argument("--reason", default="other", choices=["too_senior", "too_junior", "wrong_field", "location", "company", "sponsorship", "other"])
+    rj.add_argument("--block", action="store_true", help="never show this company again")
+    rj.set_defaults(func=cmd_reject)
+    sk = sub.add_parser("skip", help="keep a job for later")
+    sk.add_argument("job")
+    sk.set_defaults(func=cmd_skip)
+    for name in ("pause", "resume"):
+        sub.add_parser(name, help=f"{name} submitting").set_defaults(func=cmd_pause, command=name)
+
     sub.add_parser("discover", help="read every enabled board and store new jobs").set_defaults(func=cmd_discover)
     sub.add_parser("status", help="jobs and applications at a glance").set_defaults(func=cmd_status)
     sub.add_parser("doctor", help="check setup, profile, lists and browser").set_defaults(func=cmd_doctor)
     sub.add_parser("setup", help="what setup still needs").set_defaults(func=cmd_setup)
     serve = sub.add_parser("serve", help="run the private phone pages on 127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--background", action="store_true", help="start detached unless already running")
     serve.set_defaults(func=cmd_serve)
+    sched = sub.add_parser("schedule", help="install/remove the Openbase routines that run ApplyPeace")
+    sched.add_argument("command", choices=["show", "install", "remove"])
+    sched.add_argument("--port", type=int, default=8765)
+    sched.set_defaults(func=cmd_schedule)
+    pub = sub.add_parser("publish", help="make the phone page reachable from your phone over Openbase VPN")
+    pub.add_argument("--name", default="applypeace")
+    pub.add_argument("--port", type=int, default=8765)
+    pub.set_defaults(func=cmd_publish)
     return parser
 
 

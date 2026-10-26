@@ -45,6 +45,8 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
     targets = settings["targets"]
     if job["company_key"] not in enabled_keys:
         return "company list switched off"
+    if job["company_key"] in settings.get("blocked_companies", []):
+        return "company blocked"
     country, remote = job["country"], bool(job["remote"])
     where = settings["job_location"]
     if where == "us" and country != "US" and not (country is None and remote and targets["remote_ok"]):

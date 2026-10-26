@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS applications (
     submitted_values  TEXT                    -- JSON
 );
 
+CREATE TABLE IF NOT EXISTS codes (
+    job_id  TEXT NOT NULL,
+    code    TEXT NOT NULL,
+    at      TEXT NOT NULL,
+    used    INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     at      TEXT NOT NULL,

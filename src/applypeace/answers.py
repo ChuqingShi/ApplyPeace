@@ -14,8 +14,10 @@ import re
 import sqlite3
 
 from . import llm, profile
+from .companies.names import normalize
 from .config import Paths
 from .forms import Question
+from .sources.base import US_STATES
 
 DECLINE = re.compile(r"decline|don.?t wish|do not wish|not want|prefer not|choose not", re.I)
 
@@ -60,14 +62,17 @@ def _profile_value(q: Question, prof: dict, ans: dict, company: str):
     full = f"{prof.get('first_name', '')} {prof.get('last_name', '')}".strip()
     city = ", ".join(x for x in (loc.get("city"), loc.get("state")) if x)
 
+    if SIGNATURE.search(label):
+        return None, None  # an electronic signature is yours to give, in review
+    short = len(label) <= 80
     if q.kind == "file":
         if "resume" in label or "cv" in label or "resume" in field:
             return {"resume": True}, "profile"
         return None, None  # cover letters and other files: only if required, answered in review
     rules = [
-        (field == "first_name" or label in ("first name", "legal first name"), prof.get("first_name")),
-        (field == "last_name" or label in ("last name", "legal last name"), prof.get("last_name")),
         ("preferred" in label and "name" in label, prof.get("preferred_name") or prof.get("first_name")),
+        (field == "first_name" or (short and q.kind == "text" and "first name" in label), prof.get("first_name")),
+        (field == "last_name" or (short and q.kind == "text" and ("last name" in label or "surname" in label)), prof.get("last_name")),
         (field in ("name", "_systemfield_name") or label in ("full name", "name", "legal name"), full),
         ("email" in field or label.startswith("email"), prof.get("email")),
         ("phone" in field or "phone" in label, prof.get("phone")),
@@ -80,12 +85,14 @@ def _profile_value(q: Question, prof: dict, ans: dict, company: str):
         (("school" in label or "university" in label or "college" in label) and "graduat" not in label, edu.get("school")),
         ("degree" in label and "year" not in label, edu.get("degree")),
         ("discipline" in label or "field of study" in label or "major" in label, edu.get("field")),
+        ("state" in label and ("reside" in label or "live" in label) and "united states" not in label,
+         STATE_NAMES.get((loc.get("state") or "").upper(), loc.get("state")) if q.options else loc.get("state")),
     ]
     for matched, value in rules:
         if matched:
             return (choose(q, value) if q.options else value) or None, "profile"
 
-    if "authorized to work" in label or "legally authorized" in label or "eligible to work" in label:
+    if re.search(r"authori[sz]ed to work|legally authori[sz]ed|eligible to work|authori[sz]ation to work", label):
         return choose(q, ans.get("work_authorized_us")), "answers"
     if "sponsor" in label or ("visa" in label and ("require" in label or "need" in label)):
         now, future = ans.get("needs_sponsorship_now"), ans.get("needs_sponsorship_future")
@@ -102,13 +109,38 @@ def _profile_value(q: Question, prof: dict, ans: dict, company: str):
     if "how did you hear" in label and q.options:
         pick = next((o["value"] for o in q.options if re.search(r"company (web)?site|careers? (page|site)", o["label"], re.I)), None)
         return (([pick] if q.kind == "multiselect" else pick), "answers") if pick else (None, None)
-    if q.section == "eeo":
+    eeo_key = next((k for k, pat in EEO_PATTERNS if re.search(pat, label) or re.search(pat, field)), None)
+    if eeo_key and q.options and (q.section == "eeo" or any(DECLINE.search(o["label"]) for o in q.options)):
         eeo = ans.get("eeo") or {}
-        key = next((k for k, pat in (("gender", "gender"), ("race", "race"), ("hispanic_latino", "hispanic"),
-                                     ("veteran", "veteran"), ("disability", "disabilit")) if pat in label or pat in field), None)
-        if key:
-            return choose(q, "decline" if eeo.get(key, "decline") == "decline" else eeo[key]), "answers"
+        wanted = eeo.get(eeo_key, "decline")
+        return choose(q, "decline" if wanted == "decline" else wanted), "answers"
+    if "language" in label and ans.get("languages"):
+        picks = [choose(q, lang) for lang in ans["languages"]]
+        picks = [x for p in picks if p for x in (p if isinstance(p, list) else [p])]
+        if picks:
+            return (picks if q.kind == "multiselect" else picks[0]), "answers"
+    if ("18" in label and ("age" in label or "years old" in label)) and ans.get("over_18") is not None:
+        return choose(q, ans["over_18"]), "answers"
+    brand = normalize(company).split()[0] if company and normalize(company) else ""
+    if brand and PREVIOUSLY_EMPLOYED.search(label) and re.search(rf"\b{re.escape(brand)}\b", label):
+        worked_there = any(brand in normalize(e.get("company") or "") for e in prof.get("experience") or [])
+        return choose(q, worked_there), "profile"
+    if ans.get("auto_acknowledge") and q.required and ACKNOWLEDGE.search(label) and q.options:
+        affirm = [o for o in q.options if AFFIRM.match(o["label"].strip())]
+        if affirm and len(affirm) == len(q.options):  # a single "I agree" style tick box, no real choice
+            return ([affirm[0]["value"]] if q.kind == "multiselect" else affirm[0]["value"]), "consent"
     return None, None
+
+
+EEO_PATTERNS = (("gender", r"\bgender\b"), ("race", r"\brac(e|ial)\b|ethnic(ity)?\b(?!.*hispanic)"),
+                ("hispanic_latino", r"hispanic|latin[oax]"), ("veteran", r"\bveteran"), ("disability", r"disabilit"))
+PREVIOUSLY_EMPLOYED = re.compile(
+    r"(ever|previously|currently or have you ever) (been )?(employed|worked)|(employee|work(ed)?) (at|for) .* before"
+    r"|(provided|done|performed) (any )?contract(or)? work", re.I)
+ACKNOWLEDGE = re.compile(r"privacy|acknowledg|consent|certif|attest|agree|arbitrat|policy|confirm receipt|have read|terms|i understand", re.I)
+SIGNATURE = re.compile(r"signature|sign by typing|type your (full )?(legal )?name to sign", re.I)
+STATE_NAMES = {abbr: name.title() for name, abbr in US_STATES.items()}
+AFFIRM = re.compile(r"(i |yes,? i )?(agree|acknowledge|understand|have read|certify|confirm|accept|consent)|acknowledged|^yes$", re.I)
 
 
 def draft_answers(p: Paths, job: dict, questions: list[Question], company: str) -> list[dict]:

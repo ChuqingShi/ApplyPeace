@@ -6,6 +6,7 @@ VPN publication. Every form carries a per-install token.
 
 from __future__ import annotations
 
+import json
 import secrets
 import tempfile
 from pathlib import Path
@@ -14,8 +15,12 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import config, history, profile
+from .. import answers as ans
+from .. import config, history, profile, review
+from ..approval import verify
 from ..companies import registry as reg
+from ..db import connect
+from ..rank import h1b_note
 from ..resume_reader import read_resume
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -69,17 +74,19 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
     # ------------------------------------------------------------ home
 
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request):
+    def home(request: Request, msg: str = ""):
         missing = profile.completeness(p)
         if missing:
             return go("/setup")
-        return render(request, "home.html", missing=missing)
+        with connect(p.db) as conn:
+            return render(request, "home.html", msg=msg, **home_context(p, conn))
 
     # ------------------------------------------------------------ setup: choices
 
     @app.get("/setup", response_class=HTMLResponse)
     def setup_start(request: Request):
-        return render(request, "setup_choices.html", step="choices", missing=profile.completeness(p))
+        return render(request, "setup_choices.html", step="choices", missing=profile.completeness(p),
+                      ans=profile.load_answers(p))
 
     @app.post("/setup/choices")
     async def setup_choices(request: Request):
@@ -90,6 +97,9 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings["h1b_filter"] = form.get("h1b_filter") == "yes"
         settings["backup_requested"] = form.get("backup") == "yes"
         config.save_settings(settings, p)
+        answers_file = profile.load_answers(p)
+        answers_file["auto_acknowledge"] = form.get("auto_acknowledge") == "yes"
+        config.save_yaml(p.answers, answers_file)
         history.commit(p, "Setup: choices")
         return go("/setup/resume")
 
@@ -153,10 +163,11 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
     async def setup_answers_save(request: Request):
         form = await check(request)
         ans = profile.load_answers(p)
-        for field in ("work_authorized_us", "needs_sponsorship_now", "needs_sponsorship_future", "willing_to_relocate"):
+        for field in ("work_authorized_us", "needs_sponsorship_now", "needs_sponsorship_future", "willing_to_relocate", "over_18"):
             ans[field] = _bool(form.get(field))
         for field in ("visa_status", "relocation_notes", "salary_expectation", "earliest_start_date"):
             ans[field] = form.get(field, "").strip()
+        ans["languages"] = _lines(form.get("languages", "")) or ["English"]
         ans["eeo"] = {k: form.get(f"eeo_{k}", "decline") for k in ans["eeo"]}
         config.save_yaml(p.answers, ans)
         history.commit(p, "Setup: standard answers")
@@ -216,4 +227,208 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         history.commit(p, "Setup complete")
         return go("/")
 
+    # ------------------------------------------------------------ review
+
+    @app.get("/jobs/{job_id}", response_class=HTMLResponse)
+    def job_page(request: Request, job_id: str, msg: str = ""):
+        with connect(p.db) as conn:
+            ctx = job_context(p, conn, job_id)
+        return render(request, "job.html", msg=msg, **ctx)
+
+    @app.post("/jobs/{job_id}/save")
+    async def job_save(request: Request, job_id: str):
+        form = await request.form()
+        if not secrets.compare_digest(str(form.get("_token", "")), _token(p)):
+            raise HTTPException(403, "Form expired; reload the page.")
+        with connect(p.db) as conn:
+            rows = ans.load(conn, job_id)
+            values = {r["field"]: parse_value(r, form) for r in rows if r["kind"] != "file"}
+            defaults = {k.removeprefix("default__") for k in form.keys() if k.startswith("default__")}
+            review.set_answers(p, conn, job_id, values, defaults)
+            if form.get("resume_key"):
+                current = conn.execute("SELECT resume_key FROM jobs WHERE id=?", (job_id,)).fetchone()["resume_key"]
+                if form["resume_key"] != current:
+                    review.set_resume(conn, job_id, str(form["resume_key"]))
+            action = form.get("action", "save")
+            if action == "approve":
+                try:
+                    from ..approval import approve
+
+                    approve(p, conn, job_id)
+                except ValueError as exc:
+                    return go(f"/jobs/{job_id}?msg={exc}")
+                if defaults:
+                    history.commit(p, "Saved default answers")
+                return go("/?msg=Approved")
+        if defaults:
+            history.commit(p, "Saved default answers")
+        return go(f"/jobs/{job_id}?msg=Saved")
+
+    @app.post("/jobs/{job_id}/redraft")
+    async def job_redraft(request: Request, job_id: str):
+        form = await check(request)
+        from ..llm import LLMUnavailable
+
+        with connect(p.db) as conn:
+            try:
+                review.redraft(p, conn, job_id, form["field"], form.get("instruction", ""))
+            except LLMUnavailable as exc:
+                return go(f"/jobs/{job_id}?msg=Redraft unavailable: {exc}")
+        return go(f"/jobs/{job_id}?msg=Redrafted#f-{form['field']}")
+
+    @app.post("/jobs/{job_id}/skip")
+    async def job_skip(request: Request, job_id: str):
+        await check(request)
+        with connect(p.db) as conn:
+            review.skip(conn, job_id)
+        return go("/?msg=Kept for later")
+
+    @app.post("/jobs/{job_id}/reject")
+    async def job_reject(request: Request, job_id: str):
+        form = await check(request)
+        with connect(p.db) as conn:
+            review.reject(p, conn, job_id, form.get("reason", "other"), form.get("block") == "yes")
+        return go("/?msg=Rejected")
+
+    @app.post("/jobs/{job_id}/restore")
+    async def job_restore(request: Request, job_id: str):
+        await check(request)
+        with connect(p.db) as conn:
+            review.restore(conn, job_id)
+            if not ans.load(conn, job_id):
+                from ..prepare import prepare_job
+
+                company = reg.load(p).get(conn.execute("SELECT company_key FROM jobs WHERE id=?", (job_id,)).fetchone()[0], {})
+                prepare_job(p, conn, job_id, company.get("name", ""))
+        return go(f"/jobs/{job_id}")
+
+    @app.post("/jobs/{job_id}/code")
+    async def job_code(request: Request, job_id: str):
+        form = await check(request)
+        with connect(p.db) as conn:
+            review.submit_code(conn, job_id, form.get("code", ""))
+        return go(f"/jobs/{job_id}?msg=Code sent; finishing your application")
+
+    @app.post("/jobs/{job_id}/done")
+    async def job_done(request: Request, job_id: str):
+        form = await check(request)
+        with connect(p.db) as conn:
+            review.mark_done_by_hand(conn, job_id, form.get("submitted") == "yes")
+        return go("/applications")
+
+    @app.post("/jobs/{job_id}/outcome")
+    async def job_outcome(request: Request, job_id: str):
+        form = await check(request)
+        with connect(p.db) as conn:
+            review.set_outcome(conn, job_id, form.get("outcome", ""))
+        return go(f"/jobs/{job_id}?msg=Updated")
+
+    @app.post("/approve-all")
+    async def approve_all(request: Request):
+        await check(request)
+        with connect(p.db) as conn:
+            n = review.approve_ready(p, conn)
+        return go(f"/?msg=Approved {n} jobs")
+
+    @app.post("/pause")
+    async def pause(request: Request):
+        await check(request)
+        settings = config.load_settings(p)
+        settings["paused"] = not settings.get("paused")
+        config.save_settings(settings, p)
+        return go("/?msg=" + ("Paused" if settings["paused"] else "Resumed"))
+
+    @app.get("/applications", response_class=HTMLResponse)
+    def applications(request: Request):
+        with connect(p.db) as conn:
+            rows = conn.execute(
+                "SELECT a.*, j.title, j.company_key, j.url FROM applications a JOIN jobs j ON j.id=a.job_id"
+                " ORDER BY a.finished_at DESC"
+            ).fetchall()
+        names = {c["key"]: c["name"] for c in reg.load(p).values()}
+        return render(request, "applications.html", apps=rows, names=names)
+
+    @app.get("/artifacts/{job_id}/{name}")
+    def artifact(job_id: str, name: str):
+        from fastapi.responses import FileResponse
+
+        from ..apply.runner import artifact_dir
+
+        if name not in ("filled.png", "confirmation.png", "job_description.txt", "answers.json"):
+            raise HTTPException(404)
+        path = artifact_dir(p, job_id) / name
+        if not path.exists():
+            raise HTTPException(404)
+        return FileResponse(path)
+
     return app
+
+
+def parse_value(row: dict, form):
+    """Read one question's value from the submitted form, in the stored shape."""
+    key = f"f__{row['field']}"
+    if row["kind"] == "multiselect":
+        return [v for v in form.getlist(key) if v] or None
+    raw = form.get(key)
+    if raw in (None, ""):
+        return None
+    if row["kind"] == "boolean" and not row["options"]:
+        return raw == "true"
+    return str(raw)
+
+
+def home_context(p: config.Paths, conn) -> dict:
+    names = {c["key"]: c["name"] for c in reg.load(p).values()}
+
+    def cards(status_sql: str, order: str = "final_score DESC", limit: int = 50):
+        out = []
+        for j in conn.execute(f"SELECT * FROM jobs WHERE {status_sql} ORDER BY {order} LIMIT {limit}").fetchall():
+            verdict = json.loads(j["judge"]) if j["judge"] else None
+            rows = ans.load(conn, j["id"])
+            out.append({"job": j, "company": names.get(j["company_key"], j["company_key"]), "judge": verdict,
+                        "missing": len(ans.missing_required(rows))})
+        return out
+
+    batch = sorted(cards("status='queued'"), key=lambda c: (c["missing"] == 0, -(c["job"]["final_score"] or 0)))
+    return {
+        "batch": batch,
+        "needs_you": cards("status IN ('needs_you','needs_code')", "first_seen"),
+        "approved": cards("status IN ('approved','applying')"),
+        "later": cards("status='skipped'"),
+        "ai_skipped": [c for c in cards("status='candidate' AND judge IS NOT NULL", "final_score DESC", 200)
+                       if c["judge"]["recommendation"] == "skip"][:20],
+        "today": conn.execute("SELECT COUNT(*) FROM applications WHERE status='submitted' AND substr(finished_at,1,10)=date('now')").fetchone()[0],
+        "ready_count": sum(1 for c in batch if c["missing"] == 0),
+    }
+
+
+def job_context(p: config.Paths, conn, job_id: str) -> dict:
+    job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    company = reg.load(p).get(job["company_key"], {})
+    rows = ans.load(conn, job_id)
+    app_row = conn.execute("SELECT * FROM applications WHERE job_id=?", (job_id,)).fetchone()
+    approved = conn.execute("SELECT approved_at FROM approvals WHERE job_id=?", (job_id,)).fetchone()
+    record = None
+    try:
+        from ..rank import h1b_records
+
+        record = (h1b_records([company]) or {}).get(company.get("key")) if company else None
+    except Exception:
+        record = None
+    return {
+        "job": job,
+        "company": company.get("name", job["company_key"]),
+        "judge": json.loads(job["judge"]) if job["judge"] else None,
+        "rows": rows,
+        "missing": {r["field"] for r in ans.missing_required(rows)},
+        "resumes": profile.resumes_index(p),
+        "application": app_row,
+        "approved": approved,
+        "lock_ok": verify(p, conn, job_id)[0] if approved else None,
+        "h1b": h1b_note(record),
+        "summary": (job["description"] or "")[:900],
+        "reasons": review.REASON_TAGS,
+        "is_selected": lambda row, value: str(value) in [str(v) for v in (row["value"] if isinstance(row["value"], list) else [row["value"]])],
+    }

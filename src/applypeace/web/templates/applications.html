@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% set title = "Applications" %}
+{% block body %}
+<p><a href="/">← Back</a></p>
+<h1>Applications</h1>
+{% for a in apps %}
+<a class="card jobcard" href="/jobs/{{ a.job_id }}">
+<div class="row-top"><strong>{{ a.title }}</strong><span class="badge b-{{ a.status }}">{{ a.status.replace('_',' ') }}</span></div>
+<div class="muted">{{ names.get(a.company_key, a.company_key) }} · {{ (a.finished_at or a.started_at or '')[:16].replace('T',' ') }}</div>
+{% if a.detail %}<div class="muted small">{{ a.detail }}</div>{% endif %}
+</a>
+{% else %}<p class="muted">No applications yet.</p>{% endfor %}
+{% endblock %}
