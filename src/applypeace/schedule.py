@@ -21,12 +21,27 @@ def _ap(args: str, p: Paths) -> str:
     return f"cd {shlex.quote(str(PROJECT_DIR))} && {env} uv run ap {args} >> {shlex.quote(str(p.home / 'ap.log'))} 2>&1"
 
 
+SCAN_LEAD_MINUTES = 30  # scan this long before the notification, so the batch is fresh
+
+
+def scan_times(notify_time: str, interval_hours: int) -> list[str]:
+    """Daily scan times anchored to the notification: e.g. 07:00 / 8 h -> 06:30, 14:30, 22:30."""
+    hours, minutes = (int(x) for x in notify_time.split(":"))
+    first = (hours * 60 + minutes - SCAN_LEAD_MINUTES) % (24 * 60)
+    step = max(1, int(interval_hours)) * 60
+    return sorted(f"{(first + i * step) % 1440 // 60:02d}:{(first + i * step) % 60:02d}"
+                  for i in range(max(1, 1440 // step)))
+
+
 def routines(p: Paths, port: int = 8765) -> list[dict]:
     settings = load_settings(p)
     tz = settings.get("timezone", "America/Los_Angeles")
-    return [
-        {"name": PREFIX + "cycle", "command": _ap("cycle", p), "type": "interval",
-         "interval": int(settings["scan_interval_hours"]) * 3600, "timeout": 3600},
+    scans = [
+        {"name": f"{PREFIX}cycle-{i}", "command": _ap("cycle", p), "type": "daily", "time": t,
+         "timezone": tz, "timeout": 3600}
+        for i, t in enumerate(scan_times(settings["notify_time"], settings["scan_interval_hours"]), 1)
+    ]
+    return scans + [
         {"name": PREFIX + "digest", "command": _ap("digest", p), "type": "daily", "time": settings["notify_time"],
          "timezone": tz, "timeout": 300},
         {"name": PREFIX + "apply", "command": _ap("apply --max 1", p), "type": "interval", "interval": 600,
@@ -37,7 +52,7 @@ def routines(p: Paths, port: int = 8765) -> list[dict]:
 
 
 def install(p: Paths, port: int = 8765) -> list[str]:
-    out = []
+    out = remove(keep={r["name"] for r in routines(p, port)})  # drop routines from an older schedule
     for r in routines(p, port):
         cmd = ["openbase-coder", "routines", "create", r["name"], "--kind", "command", "--command", r["command"],
                "--command-timeout-seconds", str(r["timeout"]), "--cwd", str(PROJECT_DIR)]
@@ -50,11 +65,25 @@ def install(p: Paths, port: int = 8765) -> list[str]:
     return out
 
 
-def remove() -> list[str]:
+def installed_names() -> list[str]:
+    import json
+
+    proc = subprocess.run(["openbase-coder", "routines", "list"], capture_output=True, text=True)
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return []
+    items = data.get("routines", data) if isinstance(data, dict) else data
+    return [r["name"] for r in items if isinstance(r, dict) and r.get("name", "").startswith(PREFIX)]
+
+
+def remove(keep: set[str] = frozenset()) -> list[str]:
     out = []
-    for name in ("cycle", "digest", "apply", "web"):
-        proc = subprocess.run(["openbase-coder", "routines", "delete", PREFIX + name], capture_output=True, text=True)
-        out.append(f"{PREFIX}{name}: {'removed' if proc.returncode == 0 else proc.stderr.strip()[:120]}")
+    for name in installed_names():
+        if name in keep:
+            continue
+        proc = subprocess.run(["openbase-coder", "routines", "delete", name], capture_output=True, text=True)
+        out.append(f"{name}: {'removed' if proc.returncode == 0 else proc.stderr.strip()[:120]}")
     return out
 
 

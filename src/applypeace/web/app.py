@@ -202,8 +202,14 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
                 settings[field] = max(low, min(high, int(form.get(field, settings[field]))))
             except ValueError:
                 pass
+        old_time = settings["notify_time"]
         settings["notify_time"] = form.get("notify_time", settings["notify_time"])
         config.save_settings(settings, p)
+        if settings["notify_time"] != old_time:
+            from .. import schedule
+
+            if schedule.installed_names():  # keep scans aligned with the new notification time
+                schedule.install(p)
         history.commit(p, "Setup: targets and company lists")
         return go("/setup/finish")
 
