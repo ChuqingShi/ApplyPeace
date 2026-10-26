@@ -10,7 +10,7 @@ import subprocess
 
 from .config import Paths
 
-GITIGNORE = "applypeace.db\napplypeace.db-*\n*.tmp\n.web_token\nartifacts/\n"
+GITIGNORE = "applypeace.db\napplypeace.db-*\n*.tmp\n.web_token\nartifacts/\n.*.lock\n*.log\n"
 
 
 def _git(p: Paths, *args: str) -> subprocess.CompletedProcess:
