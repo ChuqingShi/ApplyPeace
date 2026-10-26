@@ -479,6 +479,16 @@ def cmd_publish(args, p: config.Paths) -> int:
     return 0
 
 
+def cmd_backup(args, p: config.Paths) -> int:
+    from . import backup
+
+    if args.connect:
+        _out(backup.connect_remote(p, args.connect))
+    else:
+        _out(backup.backup(p, "Manual backup"))
+    return 0
+
+
 # ---------------------------------------------------------------- parser
 
 
@@ -568,6 +578,9 @@ def build_parser() -> argparse.ArgumentParser:
     sched.add_argument("command", choices=["show", "install", "remove"])
     sched.add_argument("--port", type=int, default=8765)
     sched.set_defaults(func=cmd_schedule)
+    bk = sub.add_parser("backup", help="export history, refresh the plan copy, commit and push the private data repo")
+    bk.add_argument("--connect", metavar="OWNER/REPO", help="connect a private GitHub repo first")
+    bk.set_defaults(func=cmd_backup)
     pub = sub.add_parser("publish", help="make the phone page reachable from your phone over Openbase VPN")
     pub.add_argument("--name", default="applypeace")
     pub.add_argument("--port", type=int, default=8765)

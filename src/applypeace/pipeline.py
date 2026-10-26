@@ -53,6 +53,9 @@ def cycle(p: Paths, log=print) -> dict:
         log(f"Added {len(queued)} jobs to your review batch.")
         log_event(conn, "cycle", detail={"new": found.new, "queued": len(queued), **prepared})
         conn.commit()
+    from .backup import backup
+
+    log(backup(p, "After scan"))
     return {"new": found.new, "queued": len(queued), **prepared}
 
 
@@ -106,4 +109,8 @@ def apply_step(p: Paths, max_jobs: int = 1, log=print) -> dict:
             settings = load_settings(p)
             settings["last_done_notice"] = now()
             save_settings(settings, p)
+    if results:
+        from .backup import backup
+
+        log(backup(p, "After applying"))
     return results

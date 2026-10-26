@@ -29,47 +29,105 @@ def runtime_dir() -> Path:
 
 @dataclass(frozen=True)
 class Paths:
+    """Layout of the private data folder (also the private backup repo).
+
+    personal/      your profile, answers, settings, preferences and resume PDFs
+    applications/  readable history of every application, with per-job records
+    companies/     the company registry and any lists you imported
+    plan/          a copy of the ApplyPeace plan, refreshed on every backup
+    applypeace.db  the working database (not backed up; applications/ is its readable export)
+    """
+
     home: Path
 
     @property
+    def personal(self) -> Path:
+        return self.home / "personal"
+
+    @property
     def settings(self) -> Path:
-        return self.home / "settings.yml"
+        return self.personal / "settings.yml"
 
     @property
     def profile(self) -> Path:
-        return self.home / "profile.yml"
+        return self.personal / "profile.yml"
+
+    @property
+    def profile_draft(self) -> Path:
+        return self.personal / "profile.draft.yml"
 
     @property
     def answers(self) -> Path:
-        return self.home / "answers.yml"
-
-    @property
-    def companies(self) -> Path:
-        return self.home / "companies.yml"
+        return self.personal / "answers.yml"
 
     @property
     def resumes(self) -> Path:
-        return self.home / "resumes"
-
-    @property
-    def lists_dir(self) -> Path:
-        return self.home / "lists"
+        return self.personal / "resumes"
 
     @property
     def preferences(self) -> Path:
-        return self.home / "preferences.md"
+        return self.personal / "preferences.md"
+
+    @property
+    def companies_dir(self) -> Path:
+        return self.home / "companies"
+
+    @property
+    def companies(self) -> Path:
+        return self.companies_dir / "companies.yml"
+
+    @property
+    def lists_dir(self) -> Path:
+        return self.companies_dir / "lists"
+
+    @property
+    def applications(self) -> Path:
+        return self.home / "applications"
+
+    @property
+    def artifacts(self) -> Path:
+        return self.applications / "records"
+
+    @property
+    def plan(self) -> Path:
+        return self.home / "plan" / "PLAN.md"
 
     @property
     def db(self) -> Path:
         return self.home / "applypeace.db"
 
-    @property
-    def artifacts(self) -> Path:
-        return self.home / "artifacts"
+
+# Files that lived at the top of the data folder before it was split into folders.
+_OLD_LAYOUT = {
+    "settings.yml": "personal/settings.yml",
+    "profile.yml": "personal/profile.yml",
+    "profile.draft.yml": "personal/profile.draft.yml",
+    "answers.yml": "personal/answers.yml",
+    "preferences.md": "personal/preferences.md",
+    "resumes": "personal/resumes",
+    "companies.yml": "companies/companies.yml",
+    "lists": "companies/lists",
+    "artifacts": "applications/records",
+}
+
+
+def migrate_layout(p: Paths) -> list[str]:
+    """Move files from the old flat layout into the folders. Safe to call every time."""
+    moved = []
+    for old, new in _OLD_LAYOUT.items():
+        src, dest = p.home / old, p.home / new
+        if src.exists() and not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            src.rename(dest)
+            moved.append(f"{old} -> {new}")
+    return moved
 
 
 def paths() -> Paths:
-    return Paths(data_home())
+    p = Paths(data_home())
+    if p.home.exists():
+        migrate_layout(p)
+    return p
 
 
 # Company lists a user can switch on. A job qualifies if its employer is on any enabled list.

@@ -70,9 +70,15 @@ non-US headquarters.
 | `ap pause` / `ap resume` | stop or restart submitting |
 | `ap status` / `ap doctor` | overview, and a setup and health check |
 
-Your personal data (profile, answers, resumes, tracker) lives in a separate private folder
-(`APPLYPEACE_HOME`, default `ApplyPeace-data` next to this repo). It is versioned with its own
-local git history and never committed here.
+Your personal data lives in a separate private folder (`APPLYPEACE_HOME`, default
+`ApplyPeace-data` next to this repo) and is never committed here. The folder is split into:
+- `personal/`: profile, answers, settings, resumes;
+- `applications/`: readable history and per-job records with screenshots;
+- `companies/`: the company list;
+- `plan/`.
+
+It keeps its own git history. `ap backup --connect you/ApplyPeace-data` links it to a **private**
+GitHub repo, which is then pushed automatically after every scan and every application.
 
 ApplyPeace is not legal or immigration advice and is not affiliated with USCIS, DOL, Fortune or
 Forbes.

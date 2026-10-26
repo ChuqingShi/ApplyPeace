@@ -10,7 +10,7 @@ import subprocess
 
 from .config import Paths
 
-GITIGNORE = "applypeace.db\napplypeace.db-*\n*.tmp\n.web_token\nartifacts/\n.*.lock\n*.log\n"
+GITIGNORE = "# Managed by ApplyPeace\napplypeace.db\napplypeace.db-*\n*.tmp\n.web_token\n.*.lock\n*.log\n"
 
 
 def _git(p: Paths, *args: str) -> subprocess.CompletedProcess:
@@ -24,7 +24,7 @@ def ensure_repo(p: Paths) -> None:
         _git(p, "config", "user.name", "ApplyPeace")
         _git(p, "config", "user.email", "applypeace@localhost")
     ignore = p.home / ".gitignore"
-    if not ignore.exists():
+    if not ignore.exists() or ignore.read_text() != GITIGNORE:
         ignore.write_text(GITIGNORE)
 
 

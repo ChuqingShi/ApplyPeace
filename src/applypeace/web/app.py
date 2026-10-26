@@ -122,7 +122,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             entry = profile.add_resume(p, Path(tmp.name), label.strip() or "Resume")
         draft, how = read_resume(p, profile.resume_text(p, entry["key"]))
         draft["_read_by"] = how
-        config.save_yaml(p.home / "profile.draft.yml", draft)
+        config.save_yaml(p.profile_draft, draft)
         history.commit(p, f"Setup: add resume {entry['key']}")
         return go("/setup/profile")
 
@@ -131,7 +131,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
     @app.get("/setup/profile", response_class=HTMLResponse)
     def setup_profile(request: Request):
         current = profile.load_profile(p)
-        draft = config.load_yaml(p.home / "profile.draft.yml", {})
+        draft = config.load_yaml(p.profile_draft, {})
         merged = {**current, **{k: v for k, v in draft.items() if v and not current.get(k)}}
         return render(request, "setup_profile.html", step="profile", prof=merged, read_by=draft.get("_read_by"))
 
@@ -139,7 +139,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
     async def setup_profile_save(request: Request):
         form = await check(request)
         prof = profile.load_profile(p)
-        draft = config.load_yaml(p.home / "profile.draft.yml", {})
+        draft = config.load_yaml(p.profile_draft, {})
         for field in ("first_name", "last_name", "preferred_name", "email", "phone", "summary"):
             prof[field] = form.get(field, "").strip()
         prof["location"] = {k: form.get(f"location_{k}", "").strip() for k in ("city", "state", "country")}
@@ -183,7 +183,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             members = [c for c in registry.values() if key in c.get("lists", [])]
             ready = [c for c in members if c.get("verified") and c.get("ats") in reg.SUPPORTED_ATS]
             counts[key] = (len(members), len(ready))
-        draft = config.load_yaml(p.home / "profile.draft.yml", {})
+        draft = config.load_yaml(p.profile_draft, {})
         return render(request, "setup_targets.html", step="targets", lists=config.LISTS, counts=counts,
                       suggested=draft.get("suggested_titles", []))
 
