@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% set title = "Finish" %}
+{% block body %}
+<h1>Ready to go?</h1>
+{% if missing %}
+<div class="card"><strong class="warn">Still needed</strong><ul class="plain">{% for m in missing %}<li>{{ m }}</li>{% endfor %}</ul></div>
+{% else %}
+<div class="card"><strong>{{ prof.first_name }} {{ prof.last_name }}</strong><br><span class="muted">{{ prof.email }} · {{ prof.phone }}</span><br>
+Resumes: {% for r in resumes %}{{ r.label }}{{ ', ' if not loop.last }}{% endfor %}<br>
+Looking for: {{ settings.targets.titles | join(', ') }}<br>
+Submitting: {{ 'automatically after approval' if settings.submit_mode == 'auto' else 'fill only, you click Submit' }}</div>
+<p class="muted">After you finish, ApplyPeace checks your company lists every {{ settings.scan_interval_hours }} hours and sends your first batch at {{ settings.notify_time }}.</p>
+{% endif %}
+<form method="post" action="/setup/finish">
+<input type="hidden" name="_token" value="{{ token }}">
+<div class="bar"><div class="inner"><button type="submit" {{ 'disabled' if missing }}>Finish setup</button></div></div>
+</form>
+{% endblock %}

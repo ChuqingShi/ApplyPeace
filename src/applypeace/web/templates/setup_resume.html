@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% set title = "Resume" %}
+{% block body %}
+<h1>Your resume</h1>
+<p class="muted">Upload a PDF. {% if settings.llm.consent %}Claude reads it into a draft profile; nothing is used until you confirm it on the next page.{% else %}We pick out your contact details; you fill in the rest on the next page.{% endif %}
+You can add more versions (for example "Data analyst" and "Product").</p>
+{% if resumes %}
+<div class="card"><strong>Saved resumes</strong>
+<ul class="plain">{% for r in resumes %}<li>{{ r.label }} <span class="muted">({{ r.file }}, added {{ r.added }})</span></li>{% endfor %}</ul></div>
+{% endif %}
+<form method="post" action="/setup/resume" enctype="multipart/form-data">
+<input type="hidden" name="_token" value="{{ token }}">
+<label>Name for this version <span class="hint">e.g. "Data analyst"</span></label>
+<input type="text" name="label" value="{{ 'Main' if not resumes else '' }}" required>
+<label>PDF file</label>
+<input type="file" name="file" accept="application/pdf" required>
+<div class="bar"><div class="inner">
+{% if resumes %}<a class="btn secondary" href="/setup/profile">Skip</a>{% endif %}
+<button type="submit">Upload and read</button></div></div>
+</form>
+{% endblock %}

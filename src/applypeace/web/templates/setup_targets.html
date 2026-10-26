@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% set title = "Targets" %}
+{% block body %}
+<h1>What to look for</h1>
+<form method="post" action="/setup/targets">
+<input type="hidden" name="_token" value="{{ token }}">
+<label>Job titles or keywords <span class="hint">comma or one per line</span></label>
+<textarea name="titles" id="titles">{{ settings.targets.titles | join('\n') }}</textarea>
+{% if suggested %}<div class="chips"><span class="muted">Suggested from your resume (tap to add):</span>
+{% for t in suggested %}<span onclick="var a=document.getElementById('titles'); a.value=(a.value.trim()? a.value.trim()+'\n':'')+this.textContent;">{{ t }}</span>{% endfor %}</div>{% endif %}
+<label>Never show titles containing <span class="hint">e.g. Director, Intern</span></label>
+<textarea name="exclude_titles">{{ settings.targets.exclude_titles | join('\n') }}</textarea>
+<label>Preferred locations <span class="hint">optional; empty means anywhere in the chosen region</span></label>
+<textarea name="locations">{{ settings.targets.locations | join('\n') }}</textarea>
+<label class="choice"><input type="checkbox" name="remote_ok" value="yes" {{ 'checked' if settings.targets.remote_ok }}> Include remote jobs</label>
+<label>Job location</label>
+<select name="job_location">
+  <option value="us" {{ 'selected' if settings.job_location == 'us' }}>US jobs only</option>
+  <option value="non_us" {{ 'selected' if settings.job_location == 'non_us' }}>Outside the US only</option>
+  <option value="both" {{ 'selected' if settings.job_location == 'both' }}>Both</option>
+</select>
+
+<h2>Company lists</h2>
+<p class="muted">A job qualifies if its company is on any list you switch on. "Auto-apply ready" companies use Greenhouse, Ashby or Lever.</p>
+{% for key, label in lists.items() %}{% set n = counts[key] %}
+<label class="choice"><input type="checkbox" name="list_{{ key }}" value="on" {{ 'checked' if settings.lists[key] }}>
+<span>{{ label }} <span class="hint">{% if n[0] %}{{ n[0] }} companies, {{ n[1] }} auto-apply ready{% else %}not imported yet{% endif %}</span></span></label>
+{% endfor %}
+
+<h2>Pace</h2>
+<div class="row"><div><label>Jobs per batch</label><input type="number" name="batch_size" min="1" max="50" value="{{ settings.batch_size }}"></div>
+<div><label>Max submissions a day</label><input type="number" name="daily_cap" min="1" max="50" value="{{ settings.daily_cap }}"></div></div>
+<label>Daily batch notification time</label><input type="time" name="notify_time" value="{{ settings.notify_time }}">
+<div class="bar"><div class="inner"><button type="submit">Save targets</button></div></div>
+</form>
+{% endblock %}

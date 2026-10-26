@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ApplyPeace{% if title %} · {{ title }}{% endif %}</title>
+<style>
+  :root { --fg:#1c1d21; --muted:#6b6f7a; --line:#e3e5ea; --bg:#fafafb; --accent:#2f6f4f; --warn:#a15c00; --bad:#a32424; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#ececf0; --muted:#9aa0ab; --line:#2c2f36; --bg:#141518; --accent:#5fb98a; --warn:#e0a24a; --bad:#ef7070; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 -apple-system, system-ui, sans-serif; color:var(--fg); background:var(--bg); }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
+  h1 { font-size: 1.35rem; margin: .4rem 0 1rem; }
+  h2 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+  p.muted, .muted { color: var(--muted); font-size: .92rem; }
+  nav.steps { display:flex; gap:6px; overflow-x:auto; padding: 8px 0 4px; font-size:.8rem; }
+  nav.steps a { padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--muted); text-decoration:none; white-space:nowrap; }
+  nav.steps a.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  label { display:block; font-weight:600; margin: 14px 0 4px; font-size:.95rem; }
+  .hint { font-weight:400; color:var(--muted); font-size:.85rem; }
+  input[type=text], input[type=email], input[type=tel], input[type=number], input[type=time], input[type=file], textarea, select {
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:transparent; color:inherit; font:inherit; }
+  textarea { min-height: 88px; }
+  .row { display:flex; gap:10px; } .row > * { flex:1; }
+  .choice { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:6px 0; font-weight:400; }
+  .choice input { margin-top:4px; }
+  .card { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:10px 0; }
+  .chips span { display:inline-block; margin:3px 4px 3px 0; padding:3px 10px; border-radius:999px; border:1px solid var(--line); font-size:.85rem; cursor:pointer; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:12px 16px; }
+  .bar .inner { max-width:640px; margin:0 auto; display:flex; gap:10px; }
+  button, .btn { flex:1; padding:12px; border-radius:10px; border:1px solid var(--accent); background:var(--accent); color:#fff; font:inherit; font-weight:600; text-align:center; text-decoration:none; }
+  button.secondary, .btn.secondary { background:transparent; color:var(--accent); }
+  .warn { color: var(--warn); } .bad { color: var(--bad); }
+  ul.plain { padding-left: 18px; }
+</style>
+</head>
+<body>
+<main>
+{% if step %}
+<nav class="steps">{% for key, label in steps %}<a href="/setup{% if key != 'choices' %}/{{ key }}{% endif %}" class="{{ 'on' if key == step }}">{{ loop.index }}. {{ label }}</a>{% endfor %}</nav>
+{% endif %}
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

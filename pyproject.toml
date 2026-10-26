@@ -1,0 +1,34 @@
+[project]
+name = "applypeace"
+version = "0.1.0"
+description = "Sponsor-aware job applications on autopilot, with your approval."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "pypdf>=5.0",
+    "playwright>=1.48",
+    "openpyxl>=3.1.5",
+]
+
+[project.scripts]
+ap = "applypeace.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "respx>=0.21"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/applypeace"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

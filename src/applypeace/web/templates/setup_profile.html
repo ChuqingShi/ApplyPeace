@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% set title = "Details" %}
+{% block body %}
+<h1>Check your details</h1>
+<p class="muted">{% if read_by == 'llm' %}Claude read these from your resume. Fix anything that's wrong.{% elif read_by == 'basic' %}We found what we could; please fill in the rest.{% else %}Fill in your details.{% endif %}</p>
+<form method="post" action="/setup/profile">
+<input type="hidden" name="_token" value="{{ token }}">
+<div class="row"><div><label>First name</label><input type="text" name="first_name" value="{{ prof.first_name }}" required></div>
+<div><label>Last name</label><input type="text" name="last_name" value="{{ prof.last_name }}" required></div></div>
+<label>Preferred first name <span class="hint">optional</span></label><input type="text" name="preferred_name" value="{{ prof.preferred_name }}">
+<label>Email</label><input type="email" name="email" value="{{ prof.email }}" required>
+<label>Phone</label><input type="tel" name="phone" value="{{ prof.phone }}" required>
+<div class="row"><div><label>City</label><input type="text" name="location_city" value="{{ prof.location.city }}"></div>
+<div><label>State</label><input type="text" name="location_state" value="{{ prof.location.state }}"></div></div>
+<label>Country</label><input type="text" name="location_country" value="{{ prof.location.country or 'United States' }}">
+<label>LinkedIn</label><input type="text" name="link_linkedin" value="{{ prof.links.linkedin }}">
+<label>GitHub</label><input type="text" name="link_github" value="{{ prof.links.github }}">
+<label>Portfolio / website</label><input type="text" name="link_portfolio" value="{{ prof.links.portfolio }}">
+<label>Short summary <span class="hint">optional, used for essay drafts</span></label><textarea name="summary">{{ prof.summary }}</textarea>
+<label>Skills <span class="hint">comma or one per line</span></label><textarea name="skills">{{ prof.skills | join(', ') }}</textarea>
+{% if prof.experience %}<h2>Experience found</h2>
+{% for e in prof.experience %}<div class="card"><strong>{{ e.title }}</strong> · {{ e.company }} <span class="muted">{{ e.start }} – {{ e.end }}</span></div>{% endfor %}{% endif %}
+{% if prof.education %}<h2>Education found</h2>
+{% for e in prof.education %}<div class="card">{{ e.degree }} {{ e.field }} · {{ e.school }} <span class="muted">{{ e.end }}</span></div>{% endfor %}{% endif %}
+<div class="bar"><div class="inner"><button type="submit">Looks right</button></div></div>
+</form>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% set title = "Answers" %}
+{% macro yesno(name, value) %}
+<div class="row"><label class="choice"><input type="radio" name="{{ name }}" value="yes" {{ 'checked' if value == true }} required> Yes</label>
+<label class="choice"><input type="radio" name="{{ name }}" value="no" {{ 'checked' if value == false }}> No</label></div>
+{% endmacro %}
+{% block body %}
+<h1>Standard answers</h1>
+<p class="muted">Used on every application. ApplyPeace never guesses these; if a form asks something not covered here, it asks you during review.</p>
+<form method="post" action="/setup/answers">
+<input type="hidden" name="_token" value="{{ token }}">
+<label>Are you legally authorized to work in the US?</label>{{ yesno("work_authorized_us", ans.work_authorized_us) }}
+<label>Do you need visa sponsorship now?</label>{{ yesno("needs_sponsorship_now", ans.needs_sponsorship_now) }}
+<label>Will you need sponsorship in the future?</label>{{ yesno("needs_sponsorship_future", ans.needs_sponsorship_future) }}
+<label>Current visa status <span class="hint">e.g. F-1 OPT, STEM OPT, H-1B; leave blank if not applicable</span></label>
+<input type="text" name="visa_status" value="{{ ans.visa_status }}">
+<label>Willing to relocate?</label>{{ yesno("willing_to_relocate", ans.willing_to_relocate) }}
+<label>Relocation notes <span class="hint">optional, e.g. "anywhere in the US"</span></label><input type="text" name="relocation_notes" value="{{ ans.relocation_notes }}">
+<label>Salary expectation <span class="hint">e.g. "$120,000" or "open"</span></label><input type="text" name="salary_expectation" value="{{ ans.salary_expectation }}">
+<label>Earliest start date <span class="hint">e.g. "2 weeks notice" or a date</span></label><input type="text" name="earliest_start_date" value="{{ ans.earliest_start_date }}">
+<h2>Voluntary self-identification</h2>
+<p class="muted">"Decline to answer" is always fine. Only used where a form asks.</p>
+{% set eeo_labels = {"gender": "Gender", "race": "Race", "hispanic_latino": "Hispanic or Latino", "veteran": "Veteran status", "disability": "Disability"} %}
+{% for key, label in eeo_labels.items() %}
+<label>{{ label }}</label>
+<input type="text" name="eeo_{{ key }}" value="{{ ans.eeo[key] }}" placeholder="decline">
+{% endfor %}
+<div class="bar"><div class="inner"><button type="submit">Save answers</button></div></div>
+</form>
+{% endblock %}
