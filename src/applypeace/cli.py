@@ -451,8 +451,17 @@ def cmd_publish(args, p: config.Paths) -> int:
 
     from .schedule import serve_background
 
+    import time
+
+    from .schedule import port_open
+
     _out(serve_background(p, args.port))
-    proc = subprocess.run(["openbase-coder", "service", "publish", args.name, str(args.port)], capture_output=True, text=True)
+    for _ in range(40):  # wait for the page to accept connections
+        if port_open(args.port):
+            break
+        time.sleep(0.5)
+    cmd = ["openbase-coder", "service", "publish", args.name, str(args.port)] + (["--persist"] if args.persist else [])
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     url = re.search(r"https://\S+", proc.stdout + proc.stderr)
     if proc.returncode != 0 or not url:
         _out("Publishing failed:\n" + (proc.stdout + proc.stderr).strip())
@@ -562,6 +571,7 @@ def build_parser() -> argparse.ArgumentParser:
     pub = sub.add_parser("publish", help="make the phone page reachable from your phone over Openbase VPN")
     pub.add_argument("--name", default="applypeace")
     pub.add_argument("--port", type=int, default=8765)
+    pub.add_argument("--persist", action="store_true", help="keep the publication after the workspace restarts")
     pub.set_defaults(func=cmd_publish)
     return parser
 
