@@ -84,3 +84,15 @@ def test_title_matching_respects_word_order_and_level():
     from applypeace.rank.filters import NOT_SENIOR
 
     assert not SENIOR_TITLE.search(NOT_SENIOR.sub(" ", "Member of Technical Staff, Machine Learning"))
+
+
+def test_hispanic_gate_question_is_not_read_as_race():
+    from applypeace.answers import _profile_value
+    from applypeace.forms import Question
+
+    q = Question("hispanic_ethnicity", "Are you Hispanic or Latino?", "select", False,
+                 [{"label": l, "value": l} for l in ("Yes", "No", "Decline To Self Identify")], "eeo")
+    answers = {"eeo": {"race": "Asian", "hispanic_latino": "decline"}}
+    assert _profile_value(q, {}, answers, "Acme")[0] == "Decline To Self Identify"
+    answers["eeo"]["hispanic_latino"] = "No"
+    assert _profile_value(q, {}, answers, "Acme")[0] == "No"

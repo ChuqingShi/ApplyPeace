@@ -34,7 +34,7 @@ def fill(page: Page, rows: list[dict], resume: Path, upload: bool = True) -> Fil
     page.wait_for_timeout(1000)
     for row in rows:
         value, kind, field = row["value"], row["kind"], row["field"]
-        with field_guard(row):
+        with field_guard(row, report):
             if value in (None, "", []):
                 if row["required"]:
                     raise NeedsYou("missing_answer", row["label"])

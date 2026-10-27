@@ -71,6 +71,13 @@ def greenhouse_questions(client: httpx.Client, board: str, job_id: str) -> list[
             for f in q.get("fields", []):
                 out.append(Question(f["name"], _eeo_label(q.get("label", f["name"])), "select", bool(q.get("required")),
                                     [{"label": v["label"], "value": str(v["value"])} for v in f.get("values", [])], "eeo"))
+    # Greenhouse shows the Race question only after "Are you Hispanic or Latino?" is answered "No",
+    # and the API omits that gate question, so add it just before Race.
+    names = [q.field for q in out]
+    if "race" in names and "hispanic_ethnicity" not in names:
+        out.insert(names.index("race"), Question(
+            "hispanic_ethnicity", "Are you Hispanic or Latino?", "select", False,
+            [{"label": l, "value": l} for l in ("Yes", "No", "Decline To Self Identify")], "eeo"))
     demo = data.get("demographic_questions") or {}
     for q in demo.get("questions", []) if isinstance(demo, dict) else []:
         out.append(Question(f"demographic_{q['id']}", html_to_text(q.get("label", "")), "multiselect" if q.get("type") == "multi_value_multi_select" else "select",

@@ -109,7 +109,10 @@ def _profile_value(q: Question, prof: dict, ans: dict, company: str):
     if "how did you hear" in label and q.options:
         pick = next((o["value"] for o in q.options if re.search(r"company (web)?site|careers? (page|site)", o["label"], re.I)), None)
         return (([pick] if q.kind == "multiselect" else pick), "answers") if pick else (None, None)
-    eeo_key = next((k for k, pat in EEO_PATTERNS if re.search(pat, label) or re.search(pat, field)), None)
+    # The visible question decides; the internal field name is only a fallback
+    # ("hispanic_ethnicity" must not be read as the race question).
+    eeo_key = next((k for k, pat in EEO_PATTERNS if re.search(pat, label)), None) \
+        or next((k for k, pat in EEO_PATTERNS if re.search(pat, field)), None)
     if eeo_key and q.options and (q.section == "eeo" or any(DECLINE.search(o["label"]) for o in q.options)):
         eeo = ans.get("eeo") or {}
         wanted = eeo.get(eeo_key, "decline")

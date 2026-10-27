@@ -65,13 +65,20 @@ def fill(page: Page, rows: list[dict], resume: Path, country_label: str = "Unite
             pass  # optional phone country helper
     for row in rows:
         value, kind, dom_id = row["value"], row["kind"], _dom_id(row["field"])
-        with field_guard(row):
+        with field_guard(row, report):
             if value in (None, "", []):
                 if row["required"]:
                     raise NeedsYou("missing_answer", row["label"])
                 report.skipped.append(row["field"])
                 continue
             target = page.locator(f"[id='{dom_id}']")
+            if kind != "file" and not target.count():
+                page.wait_for_timeout(1500)  # fields can appear after an earlier answer
+                if not target.count():
+                    if row["required"]:
+                        raise NeedsYou("unknown_page", f"Field '{row['label']}' not found on the form")
+                    report.skipped.append(row["field"])  # optional and hidden, e.g. Race after "decline"
+                    continue
             if kind == "file":
                 if upload:
                     page.set_input_files(f"[id='{dom_id}']", str(resume))

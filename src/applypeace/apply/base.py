@@ -76,11 +76,21 @@ def wait_for_outcome(page: Page, error_selector: str, timeout_s: int = 45) -> st
 
 
 @contextmanager
-def field_guard(row: dict):
-    """Turn any failure while filling one field into a clear hand-off naming that field."""
+def field_guard(row: dict, report: FillReport | None = None):
+    """Handle a failure while filling one field.
+
+    Required field: stop and hand the application to you, naming the field.
+    Optional field: leave it blank, note it in the record, and carry on.
+    """
     try:
         yield
-    except (NeedsYou, NeedsCode):
+    except NeedsCode:
         raise
+    except NeedsYou as exc:
+        if row["required"] or report is None or exc.reason == "missing_answer":
+            raise
+        report.skipped.append(f"{row['field']} (left blank: {exc.reason})")
     except Exception as exc:
-        raise NeedsYou("unknown_page", f"Could not fill '{row['label'][:80]}' ({type(exc).__name__})") from exc
+        if row["required"] or report is None:
+            raise NeedsYou("unknown_page", f"Could not fill '{row['label'][:80]}' ({type(exc).__name__})") from exc
+        report.skipped.append(f"{row['field']} (left blank: could not fill)")

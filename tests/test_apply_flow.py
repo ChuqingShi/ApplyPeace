@@ -198,3 +198,15 @@ def test_missing_answer_hands_off(home, site, monkeypatch):
         assert runner.apply_one(home, conn, "lever:acme:1") == "needs_you"
         assert "New required question" in conn.execute("SELECT detail FROM applications").fetchone()[0]
     assert not Site.received
+
+
+def test_optional_field_that_cannot_be_filled_is_left_blank(home, site, monkeypatch):
+    monkeypatch.setattr("applypeace.apply.runner.notify", lambda *a, **k: True)
+    with connect(home.db) as conn:
+        add_job(home, conn, site)
+        # An optional question whose field isn't on the page: should be skipped, not block the application.
+        conn.execute("INSERT INTO answers (job_id, field, label, kind, required, options, value, source, position, section)"
+                     " VALUES ('lever:acme:1','pronouns','Preferred Pronouns','text',0,'[]','\"she/her\"','user',98,'custom')")
+        conn.commit()
+        approve(home, conn, "lever:acme:1")
+        assert runner.apply_one(home, conn, "lever:acme:1") == "submitted"
