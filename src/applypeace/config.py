@@ -155,7 +155,8 @@ DEFAULT_SETTINGS: dict = {
     "submit_mode": "fill_only",  # fill_only (dry run, nothing sent) | auto
     "paused": False,
     "apply_gap_seconds": 150,
-    "targets": {"titles": [], "exclude_titles": [], "locations": [], "remote_ok": True},
+    "targets": {"titles": [], "exclude_titles": [], "locations": [], "remote_ok": True, "seniority": "any"},
+    "min_fit_score": 3,  # AI fit score (1-5) a job needs to enter your batch
     "setup_complete": False,
 }
 

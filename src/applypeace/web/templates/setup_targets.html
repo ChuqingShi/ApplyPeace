@@ -7,6 +7,13 @@
 <textarea name="titles" id="titles">{{ settings.targets.titles | join('\n') }}</textarea>
 {% if suggested %}<div class="chips"><span class="muted">Suggested from your resume (tap to add):</span>
 {% for t in suggested %}<span onclick="var a=document.getElementById('titles'); a.value=(a.value.trim()? a.value.trim()+'\n':'')+this.textContent;">{{ t }}</span>{% endfor %}</div>{% endif %}
+<label>Level</label>
+<select name="seniority">
+  <option value="early" {{ 'selected' if settings.targets.seniority == 'early' }}>Early career: hide Senior, Staff, Lead, Principal, Manager titles</option>
+  <option value="any" {{ 'selected' if settings.targets.seniority != 'early' }}>Any level</option>
+</select>
+<label>Minimum AI fit score for your batch <span class="hint">1–5; jobs below this stay out, even if the batch is short</span></label>
+<input type="number" name="min_fit_score" min="1" max="5" step="0.5" value="{{ settings.min_fit_score }}">
 <label>Never show titles containing <span class="hint">e.g. Director, Intern</span></label>
 <textarea name="exclude_titles">{{ settings.targets.exclude_titles | join('\n') }}</textarea>
 <label>Preferred locations <span class="hint">optional; empty means anywhere in the chosen region</span></label>

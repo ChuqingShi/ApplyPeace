@@ -105,6 +105,7 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print) -> RankResult:
             "needs_sponsorship_future": answers.get("needs_sponsorship_future"),
             "visa_status": answers.get("visa_status"),
             "target_titles": settings["targets"]["titles"],
+            "seniority_wanted": "early career only (no senior/staff/lead roles)" if settings["targets"].get("seniority") == "early" else "any level",
             "preferred_locations": settings["targets"]["locations"],
         }
         preferences = p.preferences.read_text() if p.preferences.exists() else ""
@@ -143,12 +144,22 @@ def select_batch(p: Paths, conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute(
         "SELECT id, judge FROM jobs WHERE status='candidate' ORDER BY final_score DESC"
     ).fetchall()
+    min_score = settings.get("min_fit_score", 3)
+    # Drop batch jobs the AI now rates below your bar (e.g. after the bar was raised).
+    for row in conn.execute("SELECT id, judge FROM jobs WHERE status='queued' AND judge IS NOT NULL").fetchall():
+        verdict = json.loads(row["judge"])
+        if verdict["recommendation"] == "skip" or verdict["score"] < min_score:
+            conn.execute("UPDATE jobs SET status='candidate' WHERE id=?", (row["id"],))
+    room = max(0, settings["batch_size"] - conn.execute("SELECT COUNT(*) FROM jobs WHERE status='queued'").fetchone()[0])
     picked = []
     for row in rows:
         if len(picked) >= room:
             break
-        if row["judge"] and json.loads(row["judge"])["recommendation"] == "skip":
-            continue
+        if row["judge"]:
+            verdict = json.loads(row["judge"])
+            # Better a short batch than a padded one: only good fits get in.
+            if verdict["recommendation"] == "skip" or verdict["score"] < min_score:
+                continue
         picked.append(row["id"])
     for job_id in picked:
         conn.execute("UPDATE jobs SET status='queued' WHERE id=?", (job_id,))

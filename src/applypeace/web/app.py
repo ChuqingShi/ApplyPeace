@@ -195,6 +195,11 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings["targets"]["exclude_titles"] = _lines(form.get("exclude_titles", ""))
         settings["targets"]["locations"] = _lines(form.get("locations", ""))
         settings["targets"]["remote_ok"] = form.get("remote_ok") == "yes"
+        settings["targets"]["seniority"] = "early" if form.get("seniority") == "early" else "any"
+        try:
+            settings["min_fit_score"] = max(1.0, min(5.0, float(form.get("min_fit_score", settings["min_fit_score"]))))
+        except ValueError:
+            pass
         settings["job_location"] = form.get("job_location", "us")
         settings["lists"] = {key: form.get(f"list_{key}") == "on" for key in config.LISTS}
         for field, low, high in (("batch_size", 1, 50), ("daily_cap", 1, 50)):

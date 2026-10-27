@@ -17,6 +17,8 @@ NO_SPONSOR = re.compile(
 )
 
 REVIEWABLE = ("new", "filtered", "candidate")
+# Jobs already in your batch are re-checked too, so a settings change also cleans the batch.
+RECHECK = REVIEWABLE + ("queued",)
 
 
 def _words(text: str) -> set[str]:
@@ -24,9 +26,40 @@ def _words(text: str) -> set[str]:
     return words | {w[:-1] for w in words if w.endswith("s") and len(w) > 3}
 
 
-def title_matches(title: str, targets: list[str]) -> bool:
-    words = _words(title)
-    return any(set(re.findall(r"[a-z0-9+#]+", t.lower())) <= words for t in targets if t.strip())
+def _seq(text: str) -> list[str]:
+    return [w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z0-9+#]+", text.lower())]
+
+
+def title_matches(title: str, targets: list[str], max_gap: int = 1) -> bool:
+    """True if a target's words appear in the title in order, with at most `max_gap` extra words between.
+
+    "AI Engineer" matches "AI Platform Engineer" but not "Sales Engineer - AI Accounts".
+    """
+    words = _seq(title)
+    for target in targets:
+        want = _seq(target)
+        if not want:
+            continue
+        for start, word in enumerate(words):
+            if word != want[0]:
+                continue
+            pos, ok = start, True
+            for w in want[1:]:
+                nxt = next((i for i in range(pos + 1, min(len(words), pos + 2 + max_gap)) if words[i] == w), None)
+                if nxt is None:
+                    ok = False
+                    break
+                pos = nxt
+            if ok:
+                return True
+    return False
+
+
+# Title words that mark a role above early-career level.
+SENIOR_TITLE = re.compile(
+    r"\b(senior|sr|staff|principal|lead|leader|director|head|vp|vice president|manager|chief|distinguished"
+    r"|fellow|architect|iii|iv|v)\b|\b(level|l)\s*[5-9]\b", re.I)
+SENIORITY_LEVELS = {"early": "Early career (no Senior, Staff, Lead, Principal or Manager titles)", "any": "Any level"}
 
 
 def _age_days(posted_at: str | None, first_seen: str) -> float:
@@ -61,8 +94,10 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
             return "not in preferred locations"
     if targets["titles"] and not title_matches(job["title"], targets["titles"]):
         return "title not targeted"
-    if targets["exclude_titles"] and title_matches(job["title"], targets["exclude_titles"]):
+    if targets["exclude_titles"] and title_matches(job["title"], targets["exclude_titles"], max_gap=0):
         return "excluded title word"
+    if targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(job["title"]):
+        return "above your level"
     if _age_days(job["posted_at"], job["first_seen"]) > settings["max_posting_age_days"]:
         return "posting too old"
     if settings["h1b_filter"] and country != "non-US":
@@ -76,9 +111,11 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
 def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[str], h1b_by_company: dict) -> dict:
     """Set every reviewable job to 'candidate' or 'filtered'. Returns counts by reason."""
     counts: dict[str, int] = {}
-    rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(REVIEWABLE))})", REVIEWABLE).fetchall()
+    rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(RECHECK))})", RECHECK).fetchall()
     for job in rows:
         reason = decide(job, settings, enabled_keys, h1b_by_company.get(job["company_key"]))
+        if job["status"] == "queued" and not reason:
+            continue  # still fine: stays in the batch
         status = "filtered" if reason else "candidate"
         counts[reason or "passed"] = counts.get(reason or "passed", 0) + 1
         if status != job["status"] or reason != job["status_reason"]:

@@ -69,3 +69,15 @@ def test_lever_uses_country_code_and_created_at():
         [job] = lever.list_jobs(client, "acme")
     assert job.country == "US" and job.remote and job.posted_at.startswith("2026")
     assert "You have" in job.description
+
+
+def test_title_matching_respects_word_order_and_level():
+    from applypeace.rank.filters import SENIOR_TITLE, title_matches
+
+    assert title_matches("AI Platform Engineer", ["AI Engineer"])
+    assert title_matches("Data Scientists, Growth", ["Data Scientist"])
+    assert not title_matches("Senior Sales Engineer - AI Accounts", ["AI Engineer"])
+    assert not title_matches("Data Engineer, Science Team", ["Data Scientist"])
+    assert SENIOR_TITLE.search("Senior Data Scientist") and SENIOR_TITLE.search("Staff ML Engineer")
+    assert SENIOR_TITLE.search("Data Scientist III") and SENIOR_TITLE.search("Lead Forward Deployed Engineer")
+    assert not SENIOR_TITLE.search("Data Scientist II") and not SENIOR_TITLE.search("Applied Scientist")
