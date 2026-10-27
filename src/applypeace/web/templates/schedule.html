@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% set title = "Schedule" %}
+{% block body %}
+<p><a href="/">← Back</a></p>
+<h1>Schedule</h1>
+{% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
+<p class="muted">Changes take effect as soon as you save. Times are in {{ settings.timezone }}.</p>
+<form method="post" action="/schedule">
+<input type="hidden" name="_token" value="{{ token }}">
+<label>Daily batch notification</label>
+<input type="text" name="notify_time" value="{{ settings.notify_time }}" placeholder="7:00 or 7am">
+
+<h2>Scans</h2>
+<label class="choice"><input type="radio" name="mode" value="custom" {{ 'checked' if custom }}>
+<span>At these times <span class="hint">comma separated, e.g. 6:30, 12pm, 22:30</span></span></label>
+<input type="text" name="scan_times" value="{{ scan_text }}">
+<label class="choice"><input type="radio" name="mode" value="every" {{ 'checked' if not custom }}>
+<span>Every <input type="number" name="interval" min="1" max="24" value="{{ settings.scan_interval_hours }}" style="width:70px;display:inline"> hours, first one 30 min before the notification</span></label>
+
+<h2>Sending</h2>
+<label>Minutes between applications</label>
+<input type="number" name="apply_gap_minutes" min="1" step="0.5" value="{{ (settings.apply_gap_seconds / 60) | round(1) }}">
+<label>Time zone <span class="hint">e.g. America/Los_Angeles</span></label>
+<input type="text" name="timezone" value="{{ settings.timezone }}">
+<div class="bar"><div class="inner"><button type="submit">Save schedule</button></div></div>
+</form>
+{% endblock %}

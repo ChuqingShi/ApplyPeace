@@ -34,13 +34,34 @@ def scan_times(notify_time: str, interval_hours: int) -> list[str]:
                   for i in range(max(1, 1440 // step)))
 
 
+def parse_times(text: str) -> list[str]:
+    """'6:30, 2:30pm 22:30' -> ['06:30', '14:30', '22:30']. Raises ValueError on a bad time."""
+    out = []
+    for token in re.split(r"[,\s;]+", text.strip().lower()):
+        if not token:
+            continue
+        m = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", token)
+        if not m:
+            raise ValueError(f"'{token}' isn't a time like 6:30 or 14:30")
+        h, mnt, ampm = int(m.group(1)), int(m.group(2) or 0), m.group(3)
+        if ampm:
+            if not 1 <= h <= 12:
+                raise ValueError(f"'{token}' isn't a valid time")
+            h = h % 12 + (12 if ampm == "pm" else 0)
+        if h > 23 or mnt > 59:
+            raise ValueError(f"'{token}' isn't a valid time")
+        out.append(f"{h:02d}:{mnt:02d}")
+    return sorted(set(out))
+
+
 def routines(p: Paths, port: int = 8765) -> list[dict]:
     settings = load_settings(p)
     tz = settings.get("timezone", "America/Los_Angeles")
+    times = settings.get("scan_times") or scan_times(settings["notify_time"], settings["scan_interval_hours"])
     scans = [
         {"name": f"{PREFIX}cycle-{i}", "command": _ap("cycle", p), "type": "daily", "time": t,
          "timezone": tz, "timeout": 3600}
-        for i, t in enumerate(scan_times(settings["notify_time"], settings["scan_interval_hours"]), 1)
+        for i, t in enumerate(times, 1)
     ]
     return scans + [
         {"name": PREFIX + "digest", "command": _ap("digest", p), "type": "daily", "time": settings["notify_time"],

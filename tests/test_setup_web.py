@@ -99,3 +99,18 @@ def test_job_page_offers_each_resume_and_switches(client):
     c.post("/jobs/lever:x:1/save", data={"_token": t, "resume_key": "product"})
     with connect(p.db) as conn:
         assert conn.execute("SELECT resume_key FROM jobs").fetchone()[0] == "product"
+
+
+def test_schedule_page_saves_custom_times(client):
+    from applypeace import schedule
+
+    c, p = client
+    assert schedule.parse_times("6:30, 12pm 22:30") == ["06:30", "12:00", "22:30"]
+    t = token(c.get("/schedule").text)
+    r = c.post("/schedule", data={"_token": t, "notify_time": "7am", "mode": "custom",
+                                  "scan_times": "6:30, 1pm", "apply_gap_minutes": "3", "timezone": "America/New_York"})
+    s = config.load_settings(p)
+    assert s["notify_time"] == "07:00" and s["scan_times"] == ["06:30", "13:00"] and s["apply_gap_seconds"] == 180
+    assert [r["time"] for r in schedule.routines(p) if "cycle" in r["name"]] == ["06:30", "13:00"]
+    r = c.post("/schedule", data={"_token": t, "notify_time": "25:00", "mode": "custom", "scan_times": "6:30"})
+    assert "valid" in r.text and config.load_settings(p)["notify_time"] == "07:00"

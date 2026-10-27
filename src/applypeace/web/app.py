@@ -385,6 +385,43 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         config.save_settings(settings, p)
         return go("/?msg=" + ("Paused" if settings["paused"] else "Resumed"))
 
+    @app.get("/schedule", response_class=HTMLResponse)
+    def schedule_page(request: Request, msg: str = ""):
+        from .. import schedule
+
+        settings = config.load_settings(p)
+        times = settings.get("scan_times") or schedule.scan_times(settings["notify_time"], settings["scan_interval_hours"])
+        return render(request, "schedule.html", msg=msg, scan_text=", ".join(times),
+                      custom=bool(settings.get("scan_times")))
+
+    @app.post("/schedule")
+    async def schedule_save(request: Request):
+        form = await check(request)
+        from .. import schedule
+
+        settings = config.load_settings(p)
+        try:
+            notify = schedule.parse_times(form.get("notify_time", ""))
+            if len(notify) != 1:
+                raise ValueError("Give exactly one notification time")
+            settings["notify_time"] = notify[0]
+            if form.get("mode") == "every":
+                settings["scan_times"] = []
+                settings["scan_interval_hours"] = max(1, min(24, int(form.get("interval", 8))))
+            else:
+                times = schedule.parse_times(form.get("scan_times", ""))
+                if not times:
+                    raise ValueError("Give at least one scan time")
+                settings["scan_times"] = times
+            settings["apply_gap_seconds"] = max(60, int(float(form.get("apply_gap_minutes", 2.5)) * 60))
+            settings["timezone"] = form.get("timezone", settings["timezone"]).strip() or settings["timezone"]
+        except ValueError as exc:
+            return go(f"/schedule?msg={exc}")
+        config.save_settings(settings, p)
+        history.commit(p, "Settings: schedule")
+        applied = schedule.resync_if_mine(p)
+        return go("/schedule?msg=" + ("Saved and live" if applied else "Saved (schedule not installed here)"))
+
     @app.get("/applications", response_class=HTMLResponse)
     def applications(request: Request):
         with connect(p.db) as conn:

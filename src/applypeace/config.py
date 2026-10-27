@@ -150,6 +150,7 @@ DEFAULT_SETTINGS: dict = {
     "notify_time": "08:00",
     "timezone": "America/Los_Angeles",
     "scan_interval_hours": 8,
+    "scan_times": [],  # custom daily scan times ("HH:MM"); empty = derived from notify_time + interval
     "max_posting_age_days": 30,
     "llm": {"consent": False, "judge_daily_limit": 30},
     "submit_mode": "fill_only",  # fill_only (dry run, nothing sent) | auto
