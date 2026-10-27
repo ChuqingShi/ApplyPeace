@@ -81,3 +81,6 @@ def test_title_matching_respects_word_order_and_level():
     assert SENIOR_TITLE.search("Senior Data Scientist") and SENIOR_TITLE.search("Staff ML Engineer")
     assert SENIOR_TITLE.search("Data Scientist III") and SENIOR_TITLE.search("Lead Forward Deployed Engineer")
     assert not SENIOR_TITLE.search("Data Scientist II") and not SENIOR_TITLE.search("Applied Scientist")
+    from applypeace.rank.filters import NOT_SENIOR
+
+    assert not SENIOR_TITLE.search(NOT_SENIOR.sub(" ", "Member of Technical Staff, Machine Learning"))

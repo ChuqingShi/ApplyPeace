@@ -59,6 +59,8 @@ def title_matches(title: str, targets: list[str], max_gap: int = 1) -> bool:
 SENIOR_TITLE = re.compile(
     r"\b(senior|sr|staff|principal|lead|leader|director|head|vp|vice president|manager|chief|distinguished"
     r"|fellow|architect|iii|iv|v)\b|\b(level|l)\s*[5-9]\b", re.I)
+# Titles that contain a "senior" word but aren't senior, e.g. the generic AI-lab title.
+NOT_SENIOR = re.compile(r"member of (the )?technical staff", re.I)
 SENIORITY_LEVELS = {"early": "Early career (no Senior, Staff, Lead, Principal or Manager titles)", "any": "Any level"}
 
 
@@ -96,7 +98,7 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
         return "title not targeted"
     if targets["exclude_titles"] and title_matches(job["title"], targets["exclude_titles"], max_gap=0):
         return "excluded title word"
-    if targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(job["title"]):
+    if targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(NOT_SENIOR.sub(" ", job["title"])):
         return "above your level"
     if _age_days(job["posted_at"], job["first_seen"]) > settings["max_posting_age_days"]:
         return "posting too old"
