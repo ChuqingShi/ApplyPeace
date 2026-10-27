@@ -145,6 +145,7 @@ def select_batch(p: Paths, conn: sqlite3.Connection) -> list[str]:
         "SELECT id, judge FROM jobs WHERE status='candidate' ORDER BY final_score DESC"
     ).fetchall()
     min_score = settings.get("min_fit_score", 3)
+    ai_on = llm.available(p)
     # Drop batch jobs the AI now rates below your bar (e.g. after the bar was raised).
     for row in conn.execute("SELECT id, judge FROM jobs WHERE status='queued' AND judge IS NOT NULL").fetchall():
         verdict = json.loads(row["judge"])
@@ -160,6 +161,8 @@ def select_batch(p: Paths, conn: sqlite3.Connection) -> list[str]:
             # Better a short batch than a padded one: only good fits get in.
             if verdict["recommendation"] == "skip" or verdict["score"] < min_score:
                 continue
+        elif ai_on:
+            continue  # wait for the AI to score it in a later scan rather than queue it unreviewed
         picked.append(row["id"])
     for job_id in picked:
         conn.execute("UPDATE jobs SET status='queued' WHERE id=?", (job_id,))
