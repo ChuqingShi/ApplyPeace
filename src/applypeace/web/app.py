@@ -358,6 +358,15 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         names = {c["key"]: c["name"] for c in reg.load(p).values()}
         return render(request, "applications.html", apps=rows, names=names)
 
+    @app.get("/resumes/{key}")
+    def resume_pdf(key: str):
+        from fastapi.responses import FileResponse
+
+        entry = next((r for r in profile.resumes_index(p) if r["key"] == key), None)
+        if not entry:
+            raise HTTPException(404)
+        return FileResponse(p.resumes / entry["file"], media_type="application/pdf")
+
     @app.get("/artifacts/{job_id}/{name}")
     def artifact(job_id: str, name: str):
         from fastapi.responses import FileResponse
@@ -389,6 +398,7 @@ def parse_value(row: dict, form):
 
 def home_context(p: config.Paths, conn) -> dict:
     names = {c["key"]: c["name"] for c in reg.load(p).values()}
+    resume_labels = {r["key"]: r["label"] for r in profile.resumes_index(p)}
 
     def cards(status_sql: str, order: str = "final_score DESC", limit: int = 50):
         out = []
@@ -396,7 +406,7 @@ def home_context(p: config.Paths, conn) -> dict:
             verdict = json.loads(j["judge"]) if j["judge"] else None
             rows = ans.load(conn, j["id"])
             out.append({"job": j, "company": names.get(j["company_key"], j["company_key"]), "judge": verdict,
-                        "missing": len(ans.missing_required(rows))})
+                        "missing": len(ans.missing_required(rows)), "resume": resume_labels.get(j["resume_key"])})
         return out
 
     batch = sorted(cards("status='queued'"), key=lambda c: (c["missing"] == 0, -(c["job"]["final_score"] or 0)))
@@ -434,6 +444,7 @@ def job_context(p: config.Paths, conn, job_id: str) -> dict:
         "rows": rows,
         "missing": {r["field"] for r in ans.missing_required(rows)},
         "resumes": profile.resumes_index(p),
+        "current_resume": job["resume_key"] or (profile.resumes_index(p) or [{}])[0].get("key"),
         "application": app_row,
         "approved": approved,
         "lock_ok": verify(p, conn, job_id)[0] if approved else None,

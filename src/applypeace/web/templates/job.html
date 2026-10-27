@@ -46,15 +46,22 @@ H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif
 <form method="post" action="/jobs/{{ job.id }}/save" id="answers">
 <input type="hidden" name="_token" value="{{ token }}">
 {% if approved %}<div class="card {{ 'ok' if lock_ok else 'warn' }}">Approved {{ approved.approved_at[:16] }}. Changing anything sends it back to review.</div>{% endif %}
-<label>Resume to send</label>
-<select name="resume_key">{% for r in resumes %}<option value="{{ r.key }}" {{ 'selected' if r.key == job.resume_key }}>{{ r.label }}</option>{% endfor %}</select>
 <h2>Questions <span class="muted">({{ rows|length }})</span></h2>
 {% for r in rows %}
 <div class="q {{ 'missing' if r.field in missing }}" id="f-{{ r.field }}">
 <label>{{ r.label }}{% if r.required %} <span class="bad">*</span>{% endif %}
 <span class="hint">{{ {'profile':'from profile','answers':'standard answer','saved':'your saved default','llm':'AI draft','user':'you','consent':'acknowledged (your setup choice)','none':''}[r.source] }}</span></label>
 {% set name = 'f__' ~ r.field %}
-{% if r.kind == 'file' %}<p class="muted">Your resume is attached.</p>
+{% if r.kind == 'file' and r.value %}
+<div class="resume-pick">
+{% for res in resumes %}
+<label class="choice"><input type="radio" name="resume_key" value="{{ res.key }}" {{ 'checked' if res.key == current_resume }} onchange="this.form.submit()">
+<span><strong>{{ res.label }}</strong>{% if judge and judge.resume_key == res.key %} <span class="hint">· AI's pick for this job</span>{% endif %}
+<br><a href="/resumes/{{ res.key }}" target="_blank" rel="noopener" class="small">Preview PDF</a></span></label>
+{% endfor %}
+<p class="muted small">Tap a version to switch; it saves right away.</p>
+</div>
+{% elif r.kind == 'file' %}<p class="muted">Not attached (optional).</p>
 {% elif r.kind == 'textarea' %}<textarea name="{{ name }}" rows="6">{{ r.value or '' }}</textarea>
 {% elif r.kind == 'multiselect' %}{% for o in r.options %}<label class="choice"><input type="checkbox" name="{{ name }}" value="{{ o.value }}" {{ 'checked' if is_selected(r, o.value) }}> {{ o.label }}</label>{% endfor %}
 {% elif r.options %}<select name="{{ name }}"><option value="">Choose…</option>{% for o in r.options %}<option value="{{ o.value }}" {{ 'selected' if is_selected(r, o.value) }}>{{ o.label }}</option>{% endfor %}</select>

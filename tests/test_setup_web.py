@@ -71,3 +71,31 @@ def test_full_setup_without_llm(client):
 
     log = __import__("subprocess").run(["git", "-C", str(p.home), "log", "--oneline"], capture_output=True, text=True).stdout
     assert "Setup complete" in log and "add resume data-analyst" in log
+
+
+def test_job_page_offers_each_resume_and_switches(client):
+    from applypeace import answers as ans
+    from applypeace.db import connect, now
+
+    c, p = client
+    profile.add_resume(p, FIXTURES / "sample_resume.pdf", "Data analyst")
+    profile.add_resume(p, FIXTURES / "sample_resume.pdf", "Product")
+    config.save_yaml(p.profile, {**profile.PROFILE_TEMPLATE, "first_name": "A", "last_name": "B", "email": "a@b.c", "phone": "1"})
+    a = profile.load_answers(p)
+    a.update(work_authorized_us=True, needs_sponsorship_now=False, needs_sponsorship_future=False)
+    config.save_yaml(p.answers, a)
+    s = config.load_settings(p)
+    s["targets"]["titles"], s["setup_complete"] = ["Analyst"], True
+    config.save_settings(s, p)
+    with connect(p.db) as conn:
+        conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status, resume_key)"
+                     " VALUES ('lever:x:1','x','lever','x','1','Analyst','u',?,?,'queued','data-analyst')", (now(), now()))
+        ans.store(conn, "lever:x:1", [{"field": "resume", "label": "Resume/CV", "kind": "file", "required": True,
+                                       "options": [], "value": {"resume": True}, "source": "profile", "position": 0, "section": "standard"}])
+    html = c.get("/jobs/lever:x:1").text
+    assert 'value="data-analyst" checked' in html and 'value="product"' in html and "/resumes/product" in html
+    assert c.get("/resumes/product").headers["content-type"] == "application/pdf"
+    t = token(html)
+    c.post("/jobs/lever:x:1/save", data={"_token": t, "resume_key": "product"})
+    with connect(p.db) as conn:
+        assert conn.execute("SELECT resume_key FROM jobs").fetchone()[0] == "product"
