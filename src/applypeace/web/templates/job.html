@@ -28,6 +28,16 @@ H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif
 </div>
 {% endif %}
 
+{% if job.status != 'submitted' %}
+<details class="card"><summary><strong>I applied to this myself</strong> <span class="hint">outside ApplyPeace</span></summary>
+<form method="post" action="/jobs/{{ job.id }}/applied-myself"><input type="hidden" name="_token" value="{{ token }}">
+<label>Date applied</label><input type="text" name="applied_on" value="{{ today }}" inputmode="numeric">
+<label>Resume you used</label><select name="resume_key"><option value="">Not sure / other</option>
+{% for res in resumes %}<option value="{{ res.key }}" {{ 'selected' if res.key == current_resume }}>{{ res.label }}</option>{% endfor %}</select>
+<label>Note <span class="hint">optional, e.g. "applied via referral"</span></label><input type="text" name="note">
+<button type="submit">Record it</button></form></details>
+{% endif %}
+
 {% if judge %}
 <div class="card"><strong>AI assessment: {{ judge.score }}/5 · {{ judge.recommendation|upper }}</strong>
 <h3>Why this job</h3><ul class="plain">{% for r in judge.reasons %}<li>{{ r.point }}<br><span class="muted">“{{ r.resume_quote }}”</span></li>{% endfor %}</ul>

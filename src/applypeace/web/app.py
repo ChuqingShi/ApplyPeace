@@ -326,6 +326,43 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             review.mark_done_by_hand(conn, job_id, form.get("submitted") == "yes")
         return go("/applications")
 
+    def backup_soon(message: str) -> None:
+        import threading
+
+        from ..backup import backup
+
+        threading.Thread(target=backup, args=(p, message), daemon=True).start()
+
+    @app.post("/jobs/{job_id}/applied-myself")
+    async def job_applied_myself(request: Request, job_id: str):
+        form = await check(request)
+        from ..selfapplied import mark_applied
+
+        with connect(p.db) as conn:
+            mark_applied(conn, job_id, form.get("applied_on") or None, form.get("resume_key") or None, form.get("note", ""))
+        backup_soon("Applied by you")
+        return go(f"/jobs/{job_id}?msg=Recorded: you applied yourself")
+
+    @app.get("/applications/new", response_class=HTMLResponse)
+    def application_new(request: Request):
+        from datetime import date
+
+        return render(request, "application_new.html", resumes=profile.resumes_index(p), today=date.today().isoformat())
+
+    @app.post("/applications/new")
+    async def application_new_save(request: Request):
+        form = await check(request)
+        if not form.get("company", "").strip() or not form.get("title", "").strip():
+            return go("/applications/new")
+        from ..selfapplied import add_external
+
+        with connect(p.db) as conn:
+            job_id = add_external(p, conn, form["company"], form["title"], form.get("url", "").strip(),
+                                  form.get("applied_on") or None, form.get("resume_key") or None,
+                                  form.get("note", ""), form.get("location", ""))
+        backup_soon("Logged an application you made")
+        return go(f"/jobs/{job_id}?msg=Added to your applications")
+
     @app.post("/jobs/{job_id}/outcome")
     async def job_outcome(request: Request, job_id: str):
         form = await check(request)
@@ -352,7 +389,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
     def applications(request: Request):
         with connect(p.db) as conn:
             rows = conn.execute(
-                "SELECT a.*, j.title, j.company_key, j.url FROM applications a JOIN jobs j ON j.id=a.job_id"
+                "SELECT a.*, j.title, j.company_key, j.company_name, j.url FROM applications a JOIN jobs j ON j.id=a.job_id"
                 " ORDER BY a.finished_at DESC"
             ).fetchall()
         names = {c["key"]: c["name"] for c in reg.load(p).values()}
@@ -439,7 +476,8 @@ def job_context(p: config.Paths, conn, job_id: str) -> dict:
         record = None
     return {
         "job": job,
-        "company": company.get("name", job["company_key"]),
+        "company": job["company_name"] or company.get("name", job["company_key"]),
+        "today": __import__("datetime").date.today().isoformat(),
         "judge": json.loads(job["judge"]) if job["judge"] else None,
         "rows": rows,
         "missing": {r["field"] for r in ans.missing_required(rows)},

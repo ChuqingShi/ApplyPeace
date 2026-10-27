@@ -423,6 +423,27 @@ def cmd_skip(args, p: config.Paths) -> int:
     return 0
 
 
+def cmd_applied(args, p: config.Paths) -> int:
+    from .selfapplied import add_external, job_id_from_url, mark_applied
+
+    with connect(p.db) as conn:
+        target = args.job_or_url
+        job_id = target if conn.execute("SELECT 1 FROM jobs WHERE id=?", (target,)).fetchone() else None
+        if job_id:
+            mark_applied(conn, job_id, args.date, args.resume, args.note or "")
+        elif args.company and args.title:
+            job_id = add_external(p, conn, args.company, args.title, target if "://" in target else "",
+                                  args.date, args.resume, args.note or "")
+        elif "://" in target and job_id_from_url(conn, target):
+            job_id = job_id_from_url(conn, target)
+            mark_applied(conn, job_id, args.date, args.resume, args.note or "")
+        else:
+            _out("Unknown job. Give a job id or posting link, or add --company and --title.")
+            return 2
+    _out(f"Recorded: you applied ({job_id}).")
+    return 0
+
+
 def cmd_pause(args, p: config.Paths) -> int:
     settings = config.load_settings(p)
     settings["paused"] = args.command == "pause"
@@ -563,6 +584,14 @@ def build_parser() -> argparse.ArgumentParser:
     sk = sub.add_parser("skip", help="keep a job for later")
     sk.add_argument("job")
     sk.set_defaults(func=cmd_skip)
+    ad = sub.add_parser("applied", help="record an application you made yourself")
+    ad.add_argument("job_or_url", help="a job id from `ap queue`, or the posting link")
+    ad.add_argument("--company")
+    ad.add_argument("--title")
+    ad.add_argument("--date", help="YYYY-MM-DD, default today")
+    ad.add_argument("--resume", help="resume key, e.g. ai")
+    ad.add_argument("--note")
+    ad.set_defaults(func=cmd_applied)
     for name in ("pause", "resume"):
         sub.add_parser(name, help=f"{name} submitting").set_defaults(func=cmd_pause, command=name)
 

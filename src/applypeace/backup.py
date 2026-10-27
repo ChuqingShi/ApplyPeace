@@ -34,7 +34,7 @@ Backed up automatically by ApplyPeace. Keep this repository private.
 The working database (`applypeace.db`) is not stored here; `applications/` is its readable export.
 """
 
-COLUMNS = ["applied_at", "status", "company", "title", "location", "resume", "job_url", "record", "detail"]
+COLUMNS = ["applied_at", "status", "applied_by", "company", "title", "location", "resume", "job_url", "record", "note", "detail"]
 
 
 def export_history(p: Paths) -> int:
@@ -44,7 +44,8 @@ def export_history(p: Paths) -> int:
     names = {c["key"]: c["name"] for c in reg.load(p).values()}
     with connect(p.db) as conn:
         rows = conn.execute(
-            "SELECT a.*, j.title, j.company_key, j.location, j.url, ap.resume_key FROM applications a"
+            "SELECT a.*, j.title, j.company_key, j.company_name, j.location, j.url, j.resume_key AS job_resume,"
+            " ap.resume_key FROM applications a"
             " JOIN jobs j ON j.id = a.job_id LEFT JOIN approvals ap ON ap.job_id = a.job_id"
             " ORDER BY COALESCE(a.finished_at, a.started_at)"
         ).fetchall()
@@ -56,14 +57,15 @@ def export_history(p: Paths) -> int:
             record = p.artifacts.name + "/" + r["job_id"].replace(":", "_")
             writer.writerow({
                 "applied_at": (r["finished_at"] or r["started_at"] or "")[:19].replace("T", " "),
-                "status": r["status"], "company": names.get(r["company_key"], r["company_key"]),
-                "title": r["title"], "location": r["location"] or "", "resume": r["resume_key"] or "",
+                "status": r["status"], "applied_by": "you" if r["method"] == "you" else "ApplyPeace",
+                "company": r["company_name"] or names.get(r["company_key"], r["company_key"]), "note": r["note"] or "",
+                "title": r["title"], "location": r["location"] or "", "resume": r["resume_key"] or r["job_resume"] or "",
                 "job_url": r["url"], "record": record, "detail": r["detail"] or "",
             })
     with (p.applications / "history.jsonl").open("w") as f:
         for r in rows:
             item = {k: r[k] for k in r.keys()}
-            item["company"] = names.get(r["company_key"], r["company_key"])
+            item["company"] = r["company_name"] or names.get(r["company_key"], r["company_key"])
             item["submitted_values"] = json.loads(r["submitted_values"]) if r["submitted_values"] else None
             f.write(json.dumps(item, default=str) + "\n")
     return len(rows)

@@ -11,6 +11,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
     id            TEXT PRIMARY KEY,           -- "<ats>:<board>:<job id>"
     company_key   TEXT NOT NULL,
+    company_name  TEXT,                       -- shown name for companies not in your lists
     ats           TEXT NOT NULL,
     board         TEXT NOT NULL,
     ats_job_id    TEXT NOT NULL,
@@ -65,7 +66,9 @@ CREATE TABLE IF NOT EXISTS applications (
     detail        TEXT,
     screenshot_before TEXT,
     screenshot_after  TEXT,
-    submitted_values  TEXT                    -- JSON
+    submitted_values  TEXT,                   -- JSON
+    method        TEXT DEFAULT 'applypeace',  -- applypeace | you (applied yourself)
+    note          TEXT
 );
 
 CREATE TABLE IF NOT EXISTS codes (
@@ -105,6 +108,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     columns = {r["name"] for r in conn.execute("PRAGMA table_info(answers)")}
     if "section" not in columns:
         conn.execute("ALTER TABLE answers ADD COLUMN section TEXT")
+    if "company_name" not in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
+        conn.execute("ALTER TABLE jobs ADD COLUMN company_name TEXT")
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(applications)")}
+    if "method" not in columns:
+        conn.execute("ALTER TABLE applications ADD COLUMN method TEXT DEFAULT 'applypeace'")
+    if "note" not in columns:
+        conn.execute("ALTER TABLE applications ADD COLUMN note TEXT")
 
 
 def log_event(conn: sqlite3.Connection, kind: str, job_id: str | None = None, detail=None) -> None:

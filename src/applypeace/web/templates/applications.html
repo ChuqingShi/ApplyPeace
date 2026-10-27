@@ -2,11 +2,13 @@
 {% block body %}
 <p><a href="/">← Back</a></p>
 <h1>Applications</h1>
+<p><a class="btn secondary" href="/applications/new">+ Log an application I made myself</a></p>
 {% for a in apps %}
 <a class="card jobcard" href="/jobs/{{ a.job_id }}">
-<div class="row-top"><strong>{{ a.title }}</strong><span class="badge b-{{ a.status }}">{{ a.status.replace('_',' ') }}</span></div>
-<div class="muted">{{ names.get(a.company_key, a.company_key) }} · {{ (a.finished_at or a.started_at or '')[:16].replace('T',' ') }}</div>
-{% if a.detail %}<div class="muted small">{{ a.detail }}</div>{% endif %}
+<div class="row-top"><strong>{{ a.title }}</strong><span class="badge b-{{ a.status }}">{{ a.status.replace('_',' ') }}{% if a.method == 'you' %} · by you{% endif %}</span></div>
+<div class="muted">{{ a.company_name or names.get(a.company_key, a.company_key) }} · {{ (a.finished_at or a.started_at or '')[:16].replace('T',' ') }}</div>
+{% if a.note %}<div class="small">{{ a.note }}</div>{% endif %}
+{% if a.detail and a.method != 'you' %}<div class="muted small">{{ a.detail }}</div>{% endif %}
 </a>
 {% else %}<p class="muted">No applications yet.</p>{% endfor %}
 {% endblock %}

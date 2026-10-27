@@ -135,7 +135,12 @@ def submit_code(conn: sqlite3.Connection, job_id: str, code: str) -> None:
 
 
 def mark_done_by_hand(conn: sqlite3.Connection, job_id: str, submitted: bool) -> None:
-    status = "submitted" if submitted else "gave_up"
+    if submitted:
+        from .selfapplied import mark_applied
+
+        mark_applied(conn, job_id, note="Finished by you after ApplyPeace handed it over")
+        return
+    status = "gave_up"
     from .db import now
 
     conn.execute("UPDATE applications SET status=?, finished_at=?, detail=COALESCE(detail,'') || ? WHERE job_id=?",

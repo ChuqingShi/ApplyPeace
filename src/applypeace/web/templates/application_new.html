@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% set title = "Log an application" %}
+{% block body %}
+<p><a href="/applications">← Applications</a></p>
+<h1>Log an application you made</h1>
+<p class="muted">For jobs you applied to yourself: LinkedIn, a referral, a company website. It joins your history and backup, and ApplyPeace won't recommend the same posting again.</p>
+<form method="post" action="/applications/new">
+<input type="hidden" name="_token" value="{{ token }}">
+<label>Company</label><input type="text" name="company" required>
+<label>Job title</label><input type="text" name="title" required>
+<label>Posting link <span class="hint">optional; a Greenhouse, Ashby or Lever link is matched to a job ApplyPeace already knows</span></label><input type="text" name="url" inputmode="url">
+<label>Location <span class="hint">optional</span></label><input type="text" name="location">
+<label>Date applied</label><input type="text" name="applied_on" value="{{ today }}" inputmode="numeric">
+<label>Resume you used</label><select name="resume_key"><option value="">Not sure / other</option>
+{% for r in resumes %}<option value="{{ r.key }}">{{ r.label }}</option>{% endfor %}</select>
+<label>Note <span class="hint">optional</span></label><input type="text" name="note">
+<div class="bar"><div class="inner"><button type="submit">Add to my applications</button></div></div>
+</form>
+{% endblock %}
