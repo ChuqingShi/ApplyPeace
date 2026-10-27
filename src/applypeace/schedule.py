@@ -127,3 +127,13 @@ def serve_background(p: Paths, port: int) -> str:
     subprocess.Popen([exe, "serve", "--port", str(port)], stdout=log, stderr=log, stdin=subprocess.DEVNULL,
                      start_new_session=True, env={**os.environ, "APPLYPEACE_HOME": str(p.home)})
     return f"Started the phone page on 127.0.0.1:{port}."
+
+
+def ensure_published(name: str = "applypeace") -> str:
+    """Bring the phone page's gateway back if Openbase left it stopped (e.g. after a workspace restart)."""
+    listing = subprocess.run(["openbase-coder", "service", "list"], capture_output=True, text=True).stdout
+    line = next((l for l in listing.splitlines() if l.split()[:1] == [name]), "")
+    if not line or "stopped" not in line:
+        return ""
+    proc = subprocess.run(["openbase-coder", "service", "restore"], capture_output=True, text=True)
+    return "Restored the phone page gateway." if proc.returncode == 0 else f"Gateway restore failed: {proc.stderr.strip()[:200]}"

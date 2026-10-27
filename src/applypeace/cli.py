@@ -271,9 +271,12 @@ def cmd_setup(args, p: config.Paths) -> int:
 
 def cmd_serve(args, p: config.Paths) -> int:
     if args.background:
-        from .schedule import serve_background
+        from .schedule import ensure_published, serve_background
 
         _out(serve_background(p, args.port))
+        restored = ensure_published()  # the keep-alive also revives a stopped gateway
+        if restored:
+            _out(restored)
         return 0
     import uvicorn
 
