@@ -208,8 +208,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         if settings["notify_time"] != old_time:
             from .. import schedule
 
-            if schedule.installed_names():  # keep scans aligned with the new notification time
-                schedule.install(p)
+            schedule.resync_if_mine(p)  # keep scans aligned with the new notification time
         history.commit(p, "Setup: targets and company lists")
         return go("/setup/finish")
 

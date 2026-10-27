@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -65,7 +66,7 @@ def install(p: Paths, port: int = 8765) -> list[str]:
     return out
 
 
-def installed_names() -> list[str]:
+def _installed() -> list[dict]:
     import json
 
     proc = subprocess.run(["openbase-coder", "routines", "list"], capture_output=True, text=True)
@@ -74,7 +75,32 @@ def installed_names() -> list[str]:
     except json.JSONDecodeError:
         return []
     items = data.get("routines", data) if isinstance(data, dict) else data
-    return [r["name"] for r in items if isinstance(r, dict) and r.get("name", "").startswith(PREFIX)]
+    return [r for r in items if isinstance(r, dict) and r.get("name", "").startswith(PREFIX)]
+
+
+def installed_names() -> list[str]:
+    return [r["name"] for r in _installed()]
+
+
+def installed_home() -> str | None:
+    """The data folder the installed routines run against, if any."""
+    for r in _installed():
+        m = re.search(r"APPLYPEACE_HOME=(\S+)", r.get("command") or "")
+        if m:
+            return shlex.split(m.group(1))[0]
+    return None
+
+
+def resync_if_mine(p: Paths) -> bool:
+    """Re-install the schedule only if it already belongs to this data folder.
+
+    Settings changes in any other data folder (tests, a dev copy) must never
+    repoint the real schedule.
+    """
+    if installed_home() != str(p.home):
+        return False
+    install(p)
+    return True
 
 
 def remove(keep: set[str] = frozenset()) -> list[str]:
