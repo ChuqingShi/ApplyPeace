@@ -414,7 +414,14 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
                     raise ValueError("Give at least one scan time")
                 settings["scan_times"] = times
             settings["apply_gap_seconds"] = max(60, int(float(form.get("apply_gap_minutes", 2.5)) * 60))
-            settings["timezone"] = form.get("timezone", settings["timezone"]).strip() or settings["timezone"]
+            tz = form.get("timezone", settings["timezone"]).strip() or settings["timezone"]
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+            try:
+                ZoneInfo(tz)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError(f"'{tz}' isn't a time zone name like America/New_York")
+            settings["timezone"] = tz
         except ValueError as exc:
             return go(f"/schedule?msg={exc}")
         config.save_settings(settings, p)

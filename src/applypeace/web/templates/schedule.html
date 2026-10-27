@@ -4,7 +4,10 @@
 <h1>Schedule</h1>
 {% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
 <p class="muted">Changes take effect as soon as you save. Times are in {{ settings.timezone }}.</p>
-<form method="post" action="/schedule">
+<div class="card warn" id="tz-banner" hidden>
+Your device is set to <strong id="tz-device"></strong>, but ApplyPeace uses {{ settings.timezone }}.
+<button type="button" id="tz-use" style="margin-top:8px">Use my time zone</button></div>
+<form method="post" action="/schedule" id="schedule-form">
 <input type="hidden" name="_token" value="{{ token }}">
 <label>Daily batch notification</label>
 <input type="text" name="notify_time" value="{{ settings.notify_time }}" placeholder="7:00 or 7am">
@@ -20,7 +23,20 @@
 <label>Minutes between applications</label>
 <input type="number" name="apply_gap_minutes" min="1" step="0.5" value="{{ (settings.apply_gap_seconds / 60) | round(1) }}">
 <label>Time zone <span class="hint">e.g. America/Los_Angeles</span></label>
-<input type="text" name="timezone" value="{{ settings.timezone }}">
+<input type="text" name="timezone" id="tz-input" value="{{ settings.timezone }}">
 <div class="bar"><div class="inner"><button type="submit">Save schedule</button></div></div>
 </form>
+<script>
+(function () {
+  var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  var saved = {{ settings.timezone | tojson }};
+  if (!device || device === saved) return;
+  document.getElementById("tz-device").textContent = device;
+  document.getElementById("tz-banner").hidden = false;
+  document.getElementById("tz-use").onclick = function () {
+    document.getElementById("tz-input").value = device;
+    document.getElementById("schedule-form").submit();
+  };
+})();
+</script>
 {% endblock %}

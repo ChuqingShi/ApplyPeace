@@ -114,3 +114,7 @@ def test_schedule_page_saves_custom_times(client):
     assert [r["time"] for r in schedule.routines(p) if "cycle" in r["name"]] == ["06:30", "13:00"]
     r = c.post("/schedule", data={"_token": t, "notify_time": "25:00", "mode": "custom", "scan_times": "6:30"})
     assert "valid" in r.text and config.load_settings(p)["notify_time"] == "07:00"
+    r = c.post("/schedule", data={"_token": t, "notify_time": "7am", "mode": "custom", "scan_times": "6:30",
+                                  "timezone": "Mars/Base"})
+    assert "time zone" in r.text and config.load_settings(p)["timezone"] == "America/New_York"
+    assert 'id="tz-banner"' in c.get("/schedule").text
