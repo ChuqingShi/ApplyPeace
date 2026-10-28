@@ -15,6 +15,8 @@
 </select>
 <label>Minimum AI fit score for your batch <span class="hint">1–5; jobs below this stay out, even if the batch is short</span></label>
 <input type="number" name="min_fit_score" min="1" max="5" step="0.5" value="{{ settings.min_fit_score }}">
+<label>Jobs the AI scores per day <span class="hint">more widens your pool; each scan scores four at a time, about 15 seconds per four</span></label>
+<input type="number" name="judge_daily_limit" min="0" max="200" step="10" value="{{ settings.llm.judge_daily_limit }}">
 <label>Never show titles containing <span class="hint">e.g. Director, Intern</span></label>
 <textarea name="exclude_titles">{{ settings.targets.exclude_titles | join('\n') }}</textarea>
 <label>Preferred locations <span class="hint">optional; empty means anywhere in the chosen region</span></label>

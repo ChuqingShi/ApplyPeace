@@ -58,8 +58,10 @@ def test_full_setup_without_llm(client):
 
     c.post("/setup/targets", data={"_token": t, "titles": "Data Analyst\nAnalytics Engineer",
                                    "job_location": "us", "list_sp500": "on", "list_forbes_ai50": "on",
-                                   "batch_size": "8", "daily_cap": "12", "notify_time": "08:30"})
+                                   "batch_size": "8", "daily_cap": "12", "notify_time": "08:30",
+                                   "judge_daily_limit": "60", "seniority": "mid"})
     settings = config.load_settings(p)
+    assert settings["llm"]["judge_daily_limit"] == 60 and settings["targets"]["seniority"] == "mid"
     assert settings["targets"]["titles"] == ["Data Analyst", "Analytics Engineer"]
     assert settings["lists"]["sp500"] and not settings["lists"]["nasdaq100"]
     assert settings["batch_size"] == 8

@@ -207,6 +207,10 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             settings["min_fit_score"] = max(1.0, min(5.0, float(form.get("min_fit_score", settings["min_fit_score"]))))
         except ValueError:
             pass
+        try:
+            settings["llm"]["judge_daily_limit"] = max(0, min(200, int(form.get("judge_daily_limit", settings["llm"]["judge_daily_limit"]))))
+        except ValueError:
+            pass
         settings["job_location"] = form.get("job_location", "us")
         settings["lists"] = {key: form.get(f"list_{key}") == "on" for key in config.LISTS}
         for field, low, high in (("batch_size", 1, 50), ("daily_cap", 1, 50)):
