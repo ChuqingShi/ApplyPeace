@@ -231,3 +231,26 @@ def test_next_scan_time():
     at = lambda h, m: datetime(2026, 10, 28, h, m, tzinfo=ZoneInfo("America/Los_Angeles"))
     assert next_scan(s, at(9, 0)) == "today at 2:30 PM PDT"
     assert next_scan(s, at(22, 30)) == "tomorrow at 6:30 AM PDT"
+
+
+def test_quick_reject_from_skipped_by_ai(client):
+    import json
+
+    from applypeace import review
+    from applypeace.db import connect, now
+
+    c, p = client
+    judge = {"score": 2, "recommendation": "skip", "reasons": [], "concerns": ["Requires U.S. person status (ITAR)"],
+             "sponsorship_clues": "", "resume_key": "x"}
+    with connect(p.db) as conn:
+        conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status, judge)"
+                     " VALUES ('x:a:1','acme','x','a','1','Analyst','u',?,?,'candidate',?)", (now(), now(), json.dumps(judge)))
+        conn.commit()
+    html = c.get("/jobs/x:a:1").text
+    assert "Bring back for review" in html and 'class="quick-reject"' in html
+    assert '<option value="sponsorship" selected>' in html
+    c.post("/jobs/x:a:1/reject", data={"_token": token(html), "reason": "sponsorship"})
+    with connect(p.db) as conn:
+        assert tuple(conn.execute("SELECT status, status_reason FROM jobs").fetchone()) == ("rejected", "visa / sponsorship")
+    assert review.suggest_reason({"concerns": ["Needs 8+ years of experience"]}) == "too_senior"
+    assert review.suggest_reason(None) == "other"

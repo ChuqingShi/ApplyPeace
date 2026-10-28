@@ -49,7 +49,13 @@ H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif
 
 {% if job.status in ('candidate', 'skipped', 'rejected') %}
 <form method="post" action="/jobs/{{ job.id }}/restore"><input type="hidden" name="_token" value="{{ token }}">
-<button type="submit">Bring back for review</button></form>
+<button class="secondary" type="submit">Bring back for review</button></form>
+{% if job.status != 'rejected' %}
+<style>.quick-reject{display:flex;gap:8px;align-items:center;margin-top:8px}.quick-reject select{flex:1;min-width:0;margin:0}.quick-reject button{flex:0 0 auto;width:auto;margin:0;padding-left:22px;padding-right:22px}</style>
+<form method="post" action="/jobs/{{ job.id }}/reject" class="quick-reject"><input type="hidden" name="_token" value="{{ token }}">
+<select name="reason" aria-label="Reject because">{% for k, v in reasons.items() %}<option value="{{ k }}"{{ ' selected' if k == suggested_reason }}>{{ v }}</option>{% endfor %}</select>
+<button type="submit">Reject</button></form>
+{% endif %}
 {% endif %}
 
 {% if rows %}

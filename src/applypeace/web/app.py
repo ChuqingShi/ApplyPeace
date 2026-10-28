@@ -559,5 +559,6 @@ def job_context(p: config.Paths, conn, job_id: str) -> dict:
         "h1b": h1b_note(record),
         "summary": (job["description"] or "")[:900],
         "reasons": review.REASON_TAGS,
+        "suggested_reason": review.suggest_reason(json.loads(job["judge"]) if job["judge"] else None),
         "is_selected": lambda row, value: str(value) in [str(v) for v in (row["value"] if isinstance(row["value"], list) else [row["value"]])],
     }

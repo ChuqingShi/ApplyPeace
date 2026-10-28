@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import date
 
@@ -20,6 +21,20 @@ REASON_TAGS = {
     "sponsorship": "visa / sponsorship",
     "other": "other",
 }
+# Words in the AI's concerns that point at a reject reason, checked in order.
+REASON_HINTS = [
+    ("sponsorship", re.compile(r"u\.?s\.? person|citizen|clearance|sponsor|visa|h-?1b|green card|itar|export control", re.I)),
+    ("too_senior", re.compile(r"senior|years of experience|\d+\+? years|too junior for", re.I)),
+    ("location", re.compile(r"relocat|on-?site|location|in-office", re.I)),
+]
+
+
+def suggest_reason(judge: dict | None) -> str:
+    """The likeliest reject reason for a job the AI skipped, to preselect in the dropdown."""
+    text = " ".join([*(judge or {}).get("concerns", []), (judge or {}).get("sponsorship_clues") or ""])
+    return next((key for key, pattern in REASON_HINTS if pattern.search(text)), "other")
+
+
 PREFERENCE_HEADER = "# Preferences learned from your choices\n\nEdit freely; the job picker reads this file.\n\n"
 
 
@@ -91,6 +106,7 @@ def remember_choice(p: Paths, line: str) -> None:
     head, _, body = text.partition("## Recent choices\n")
     lines = [l for l in body.splitlines() if l.strip()][-59:]
     lines.append(f"- {date.today().isoformat()} {line}")
+    p.preferences.parent.mkdir(parents=True, exist_ok=True)
     p.preferences.write_text((head if head.strip() else PREFERENCE_HEADER) + "## Recent choices\n" + "\n".join(lines) + "\n")
 
 
