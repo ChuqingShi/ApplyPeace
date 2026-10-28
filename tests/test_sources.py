@@ -138,3 +138,15 @@ def test_workday_lists_matching_titles_and_reads_details():
         info = workday.details(client, many.board, many.url)
     assert info == {"description": "Build models", "location": "Austin, TX | Toronto", "country": "US",
                     "remote": False, "posted_at": "2026-10-26"}
+
+
+def test_workday_pages_worth_reading():
+    from applypeace import config
+    from applypeace.rank.filters import worth_reading
+
+    s = {**config.DEFAULT_SETTINGS, "targets": {**config.DEFAULT_SETTINGS["targets"], "seniority": "early",
+                                                "exclude_titles": ["Intern"]}}
+    wanted = worth_reading(s)
+    assert wanted("Data Scientist", None) and wanted("Data Scientist", "US")
+    assert not wanted("Data Scientist", "non-US") and not wanted("Senior Data Scientist", "US")
+    assert not wanted("Data Scientist Intern", "US")

@@ -90,7 +90,8 @@ def list_jobs(client: httpx.Client, board: str, titles: list[str] | None = None)
                                json={"appliedFacets": {}, "limit": PAGE, "offset": page * PAGE, "searchText": term})
             resp.raise_for_status()
             postings = resp.json().get("jobPostings") or []
-            hits = [r for r in postings if r.get("externalPath") and (not titles or title_matches(r["title"], titles))]
+            hits = [r for r in postings if r.get("externalPath") and r.get("title")
+                    and (not titles or title_matches(r["title"], titles))]
             for raw in hits:
                 job = _job(board, raw)
                 found.setdefault(job.id, job)

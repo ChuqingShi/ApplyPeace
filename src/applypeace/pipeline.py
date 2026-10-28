@@ -14,6 +14,7 @@ from .discover import discover
 from .notify import notify
 from .prepare import prepare_queue
 from .rank import rank, select_batch
+from .rank.filters import worth_reading
 
 
 class SetupIncomplete(RuntimeError):
@@ -49,7 +50,7 @@ def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
     settings = load_settings(p)
     started = now()
     with connect(p.db) as conn:
-        found = discover(conn, reg.enabled(reg.load(p), settings), settings["targets"]["titles"])
+        found = discover(conn, reg.enabled(reg.load(p), settings), settings["targets"]["titles"], worth_reading(settings))
         log(f"Scanned {found.boards} boards: {found.new} new jobs, {found.closed} closed.")
         ranked = rank(p, conn, log=log)
         log(f"{ranked.candidates} jobs passed the filters; AI judged {ranked.judged}.")

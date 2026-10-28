@@ -145,11 +145,12 @@ def cmd_lists_confirm(args, p: config.Paths) -> int:
 
 def cmd_discover(args, p: config.Paths) -> int:
     from .discover import discover
+    from .rank.filters import worth_reading
 
     settings = config.load_settings(p)
     companies = reg.enabled(reg.load(p), settings)
     with connect(p.db) as conn:
-        result = discover(conn, companies, settings["targets"]["titles"])
+        result = discover(conn, companies, settings["targets"]["titles"], worth_reading(settings))
     _out(f"Read {result.boards} boards: {result.seen} open jobs, {result.new} new, {result.closed} closed.")
     for error in result.errors[:10]:
         _out(f"  ! {error}")

@@ -120,6 +120,21 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
     return None
 
 
+def worth_reading(settings: dict):
+    """Whether a posting is worth opening for its details: False when its title or a known
+    country already rules it out, so a scan doesn't spend requests on jobs it will drop."""
+    targets, where = settings["targets"], settings["job_location"]
+
+    def check(title: str, country: str | None) -> bool:
+        if (where == "us" and country == "non-US") or (where == "non_us" and country == "US"):
+            return False
+        if targets["exclude_titles"] and title_matches(title, targets["exclude_titles"], max_gap=0):
+            return False
+        return not (targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(NOT_SENIOR.sub(" ", title)))
+
+    return check
+
+
 def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[str], h1b_by_company: dict) -> dict:
     """Set every reviewable job to 'candidate' or 'filtered'. Returns counts by reason.
 

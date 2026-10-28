@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures as cf
 import json
 import math
 import sqlite3
@@ -18,6 +19,7 @@ from .keywords import tfidf_scores
 
 # Weights for the final score; recency decays with a two-week half-life-ish time constant.
 FIT_WEIGHT, RECENCY_WEIGHT, H1B_BONUS, RECENCY_DAYS = 0.75, 0.25, 0.05, 14
+JUDGE_WORKERS = 4  # AI judgements run side by side; each takes 10-20 seconds
 
 
 @dataclass
@@ -110,12 +112,19 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print) -> RankResult:
         }
         preferences = p.preferences.read_text() if p.preferences.exists() else ""
         names = {c["key"]: c["name"] for c in companies}
-        for job in todo:
+
+        def judge(job):
             payload = {**dict(job), "company": names.get(job["company_key"], job["company_key"]),
                        "h1b_note": h1b_note((records or {}).get(job["company_key"]))}
             try:
-                verdict = judge_job(p, payload, resumes, candidate, preferences)
+                return job, judge_job(p, payload, resumes, candidate, preferences), None
             except llm.LLMUnavailable as exc:
+                return job, None, exc
+
+        with cf.ThreadPoolExecutor(JUDGE_WORKERS) as pool:
+            verdicts = list(pool.map(judge, todo))
+        for job, verdict, exc in verdicts:
+            if exc:
                 result.judge_errors += 1
                 log(f"Judge unavailable ({exc}); remaining jobs use keyword ranking.")
                 break

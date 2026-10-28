@@ -211,7 +211,7 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
 
     sent = []
     monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg) or True)
-    monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None: DiscoverResult())
+    monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None, wanted=None: DiscoverResult())
     monkeypatch.setattr(pipeline, "rank", lambda p, conn, log: RankResult())
     monkeypatch.setattr(pipeline, "select_batch", lambda p, conn: [])
     monkeypatch.setattr(pipeline, "prepare_queue", lambda p, conn, log: {"prepared": 0})

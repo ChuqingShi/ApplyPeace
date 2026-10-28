@@ -47,13 +47,18 @@ def _workday_details(job: sqlite3.Row) -> tuple[str, dict | None]:
         return job["id"], None
 
 
-def fill_workday_details(conn: sqlite3.Connection, max_age_days: int = 31, workers: int = 6) -> int:
-    """Read the job page of each new, recent Workday posting (its description and real location)."""
+def fill_workday_details(conn: sqlite3.Connection, wanted=None, max_age_days: int = 31, workers: int = 6) -> int:
+    """Read the job page of each recent Workday posting not yet read (its description and real location).
+
+    `wanted(title, country)` skips postings the filters would drop anyway. A job filtered only
+    because its location was unknown ("3 Locations") is read too, then filtered again.
+    """
     since = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).date().isoformat()
-    todo = conn.execute(
-        "SELECT id, board, url FROM jobs WHERE ats='workday' AND description IS NULL AND status='new'"
-        " AND (posted_at IS NULL OR posted_at >= ?) ORDER BY posted_at DESC LIMIT ?",
-        (since, WORKDAY_DETAILS_PER_SCAN)).fetchall()
+    rows = conn.execute(
+        "SELECT id, board, url, title, country FROM jobs WHERE ats='workday' AND description IS NULL"
+        " AND status IN ('new', 'filtered') AND (posted_at IS NULL OR posted_at >= ?) ORDER BY posted_at DESC",
+        (since,)).fetchall()
+    todo = [r for r in rows if not wanted or wanted(r["title"], r["country"])][:WORKDAY_DETAILS_PER_SCAN]
     done = 0
     with cf.ThreadPoolExecutor(workers) as pool:
         for job_id, info in pool.map(_workday_details, todo):
@@ -94,7 +99,7 @@ def upsert_jobs(conn: sqlite3.Connection, company_key: str, jobs: list[Job]) -> 
 
 
 def discover(conn: sqlite3.Connection, companies: list[dict], titles: list[str] | None = None,
-             workers: int = 8) -> DiscoverResult:
+             wanted=None, workers: int = 8) -> DiscoverResult:
     result = DiscoverResult()
     boards = [c for c in companies if c.get("ats") in reg.SUPPORTED_ATS and c.get("board") and c.get("verified")]
     stamp = now()
@@ -115,7 +120,7 @@ def discover(conn: sqlite3.Connection, companies: list[dict], titles: list[str] 
                 (company["key"], stamp, *statuses),
             ).rowcount
             result.closed += closed
-    result.details = fill_workday_details(conn)
+    result.details = fill_workday_details(conn, wanted)
     log_event(conn, "discover", detail=result.__dict__)
     conn.commit()
     return result
