@@ -190,9 +190,22 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             ready = [c for c in members if c.get("verified") and c.get("ats") in reg.SUPPORTED_ATS]
             counts[key] = (len(members), len(ready))
         draft = config.load_yaml(p.profile_draft, {})
+        from .. import llm, titles
+
         return render(request, "setup_targets.html", step="targets", lists=config.LISTS, counts=counts,
-                      seniority_levels=SENIORITY_LEVELS,
-                      suggested=draft.get("suggested_titles", []))
+                      seniority_levels=SENIORITY_LEVELS, ai_titles=titles.saved(p), ai_on=llm.available(p),
+                      msg=request.query_params.get("msg", ""), suggested=draft.get("suggested_titles", []))
+
+    @app.post("/setup/targets/suggest")
+    async def suggest_titles(request: Request):
+        from .. import llm, titles
+
+        await check(request)
+        try:
+            found = titles.suggest_titles(p)
+        except llm.LLMUnavailable as exc:
+            return go(f"/setup/targets?msg=AI unavailable: {exc}#ai-titles")
+        return go(f"/setup/targets?msg=The AI suggested {len(found)} titles. Tap one to add it.#ai-titles")
 
     @app.post("/setup/targets")
     async def setup_targets_save(request: Request):

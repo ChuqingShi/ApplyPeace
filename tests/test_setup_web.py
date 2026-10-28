@@ -286,3 +286,26 @@ def test_workday_jobs_are_yours_to_apply_and_never_auto_approved(client):
     html = c.get("/jobs/workday:acme.wd5.Ext:R1").text
     assert "Workday site" in html and "Open the application" in html and "Skip for now" in html
     assert "<details class=\"card\" open>" in html and "/resumes/data-analyst" in html
+
+
+def test_ai_title_suggestions_show_as_chips(client, monkeypatch):
+    from applypeace import llm, titles
+
+    c, p = client
+    profile.add_resume(p, FIXTURES / "sample_resume.pdf", "Data analyst")
+    s = config.load_settings(p)
+    s["llm"]["consent"], s["targets"]["titles"] = True, ["Data Analyst"]
+    config.save_settings(s, p)
+    monkeypatch.setattr(llm, "available", lambda p: True)
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: {"titles": [
+        {"title": "Analytics Engineer", "why": "dbt work", "fit": "core"},
+        {"title": "data analyst", "why": "already there", "fit": "core"},
+        {"title": "Statistician", "why": "stats", "fit": "stretch"}]})
+    t = token(c.get("/setup/targets").text)
+    r = c.post("/setup/targets/suggest", data={"_token": t}, follow_redirects=False)
+    assert "suggested%202%20titles" in r.headers["location"]
+    html = c.get("/setup/targets").text
+    assert "Analytics Engineer" in html and "Stretch" in html and "dbt work" in html
+    s["targets"]["titles"].append("Statistician")
+    config.save_settings(s, p)
+    assert [t["title"] for t in titles.saved(p)] == ["Analytics Engineer"]  # added titles drop out of the list

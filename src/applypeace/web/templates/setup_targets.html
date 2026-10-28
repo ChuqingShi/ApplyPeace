@@ -5,8 +5,30 @@
 <input type="hidden" name="_token" value="{{ token }}">
 <label>Job titles or keywords <span class="hint">comma or one per line</span></label>
 <textarea name="titles" id="titles">{{ settings.targets.titles | join('\n') }}</textarea>
-{% if suggested %}<div class="chips"><span class="muted">Suggested from your resume (tap to add):</span>
-{% for t in suggested %}<span onclick="var a=document.getElementById('titles'); a.value=(a.value.trim()? a.value.trim()+'\n':'')+this.textContent;">{{ t }}</span>{% endfor %}</div>{% endif %}
+{% if suggested and not ai_titles %}<div class="chips"><span class="muted">Suggested from your resume (tap to add):</span>
+{% for t in suggested %}<span onclick="addTitle(this)">{{ t }}</span>{% endfor %}</div>{% endif %}
+<div id="ai-titles">
+{% if msg %}<div class="card ok small">{{ msg }}</div>{% endif %}
+{% if ai_titles %}
+{% for group, name in (('core', 'Strong fits'), ('adjacent', 'Your skills transfer'), ('stretch', 'Stretch')) %}
+{% set items = ai_titles | selectattr('fit', 'equalto', group) | list %}
+{% if items %}<div class="chips"><span class="muted">{{ name }} (tap to add):</span>
+{% for t in items %}<span title="{{ t.why }}" onclick="addTitle(this)">{{ t.title }}</span>{% endfor %}</div>{% endif %}
+{% endfor %}
+<details class="small"><summary>Why the AI suggested these</summary><ul class="plain">
+{% for t in ai_titles %}<li><strong>{{ t.title }}</strong>: {{ t.why }}</li>{% endfor %}</ul></details>
+{% endif %}
+{% if ai_on %}<button class="secondary small" type="submit" formaction="/setup/targets/suggest" formnovalidate
+  onclick="this.textContent='Reading your resumes… (about 30 seconds)'">{{ 'Suggest more titles with AI' if ai_titles else 'Suggest job titles with AI' }}</button>
+<span class="hint">reads all your resumes</span>{% endif %}
+</div>
+<script>
+function addTitle(chip) {
+  var a = document.getElementById('titles');
+  a.value = (a.value.trim() ? a.value.trim() + '\n' : '') + chip.textContent;
+  chip.remove();
+}
+</script>
 <label>Level</label>
 <select name="seniority">
 {% for key, (label, _) in seniority_levels.items() %}
