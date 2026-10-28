@@ -20,7 +20,9 @@ SUPPORTED_ATS = ("greenhouse", "ashby", "lever", "workday")
 # Job systems ApplyPeace can fill and submit for you; for the others you apply yourself.
 AUTO_APPLY_ATS = ("greenhouse", "ashby", "lever")
 # Bump when the board finder learns a new job system, so companies it missed are looked up again.
-RESOLVER_VERSION = 2
+RESOLVER_VERSION = 3
+# Matches made by an older finder that it now checks more strictly.
+RECHECK_SINCE = {"not_found": 2, "workday": 3}
 # Lists of large companies, where a tiny board usually belongs to someone else.
 LARGE_COMPANY_LISTS = {"fortune500", "sp500", "nasdaq100", "forbes_global2000_us", "forbes_global2000_intl"}
 
@@ -107,7 +109,7 @@ def needs_resolution(company: dict, refresh_days: int = 30) -> bool:
     resolved = company.get("resolved_at")
     if not resolved:
         return True
-    if company.get("ats") == "not_found" and company.get("resolver", 1) < RESOLVER_VERSION:
+    if company.get("resolver", 1) < RECHECK_SINCE.get(company.get("ats"), 0):
         return True
     stale = date.fromisoformat(resolved) < date.today() - timedelta(days=refresh_days)
     return stale and company.get("ats") not in SUPPORTED_ATS

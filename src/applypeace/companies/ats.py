@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from .names import match_level, normalize
+from .names import GENERIC_EXTRAS, match_level, normalize
 
 GENERIC_FIRST_WORDS = {
     "american", "united", "general", "first", "national", "international", "global", "the",
@@ -110,7 +110,11 @@ WORKDAY_PODS = ("wd1", "wd5", "wd3", "wd12", "wd10", "wd2", "wd103", "wd501", "w
 WORKDAY_COMMON_SITES = ("External", "Careers", "External_Careers", "{T}Careers", "{T}_Careers", "{T}External",
                         "ExternalCareerSite", "Search")
 # Career sites that aren't the main one for experienced hires.
-WORKDAY_SKIP_SITE = re.compile(r"intern|internal|contractor|alumni|employee|campus|student|university|grad", re.I)
+WORKDAY_SKIP_SITE = re.compile(r"intern|internal|contractor|alumni|employee|campus|student|university|college|grad"
+                               r"|equest|broadbean|agency|agencies|recruiter", re.I)
+# Words that only describe a business; any other word in the name must show on the site itself.
+DESCRIPTOR_WORDS = GENERIC_EXTRAS | {"laboratories", "industries", "companies", "company", "holdings", "group",
+                                     "technologies", "technology", "financial", "services", "energy", "health"}
 
 
 def _workday_sites(client: httpx.Client, tenant: str) -> tuple[str, list[str]] | None:
@@ -164,8 +168,8 @@ def _workday(client: httpx.Client, slug: str, company: str) -> tuple[str | None,
     if slug == "".join(words):
         level = "exact"
     elif level == "none" and words and slug == words[0] and count >= MIN_JOBS_FOR_LARGE_COMPANY \
-            and re.search(rf"\b{re.escape(words[0])}\b", normalize(text)):
-        level = "exact"
+            and set(words) - DESCRIPTOR_WORDS <= set(normalize(text).split()):
+        level = "exact"  # e.g. "abbott" for Abbott Laboratories, but not "huntington" for Huntington Ingalls
     return owner or company if level != "none" else owner, count, f"{slug}.{pod}.{site}", level
 
 

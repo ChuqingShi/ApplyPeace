@@ -121,3 +121,23 @@ def test_companies_missed_before_workday_are_looked_up_again():
     old = {"key": "a", "name": "A", "ats": "not_found", "resolved_at": str(date.today())}
     assert reg.needs_resolution(old)
     assert not reg.needs_resolution({**old, "resolver": reg.RESOLVER_VERSION})
+
+
+@respx.mock
+def test_workday_first_word_tenant_needs_the_rest_of_the_name_on_the_site():
+    from applypeace.companies import ats
+
+    respx.route(host__regex=r".*(greenhouse|ashbyhq|lever)\..*").mock(return_value=httpx.Response(404))
+    respx.get(url__regex=r"https://huntington\.wd(?!5\.).*robots\.txt").mock(return_value=httpx.Response(422))
+    respx.route(host__regex=r"^(huntingtoningalls|huntingtonlaboratories)\..*").mock(return_value=httpx.Response(422))
+    respx.get("https://huntington.wd5.myworkdayjobs.com/robots.txt").mock(return_value=httpx.Response(200, text=(
+        "Sitemap: https://huntington.wd5.myworkdayjobs.com/HNBcareers/siteMap.xml\n"
+        "Sitemap: https://huntington.wd5.myworkdayjobs.com/eQuest/siteMap.xml\n")))
+    respx.post("https://huntington.wd5.myworkdayjobs.com/wday/cxs/huntington/HNBcareers/jobs").mock(
+        return_value=httpx.Response(200, json={"total": 700}))
+    respx.get("https://huntington.wd5.myworkdayjobs.com/en-US/HNBcareers").mock(
+        return_value=httpx.Response(200, text='<meta property="og:description" content="Huntington is a bank.">'))
+    with httpx.Client() as client:
+        assert ats.find_board(client, "Huntington Ingalls") is None  # "Ingalls" isn't on the bank's site
+        board = ats.find_board(client, "Huntington Laboratories")  # only a descriptor word is missing
+    assert board.board == "huntington.wd5.HNBcareers" and board.match == "exact"
