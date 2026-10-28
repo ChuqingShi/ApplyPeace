@@ -96,3 +96,45 @@ def test_hispanic_gate_question_is_not_read_as_race():
     assert _profile_value(q, {}, answers, "Acme")[0] == "Decline To Self Identify"
     answers["eeo"]["hispanic_latino"] = "No"
     assert _profile_value(q, {}, answers, "Acme")[0] == "No"
+
+
+def test_workday_search_terms_and_posted_dates():
+    from datetime import datetime, timezone
+
+    from applypeace.sources import workday
+
+    assert workday.search_terms(["Data Scientist", "Applied Data Scientist", "AI Engineer"]) == ["ai engineer", "data scientist"]
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    assert workday.posted_date("Posted Today", now) == "2026-10-28"
+    assert workday.posted_date("Posted Yesterday", now) == "2026-10-27"
+    assert workday.posted_date("Posted 3 Days Ago", now) == "2026-10-25"
+    assert workday.posted_date("Posted 30+ Days Ago", now) == "2026-09-27"
+
+
+@respx.mock
+def test_workday_lists_matching_titles_and_reads_details():
+    from applypeace.sources import workday
+
+    api = "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/External"
+    page1 = [{"title": f"Data Scientist {i}", "externalPath": f"/job/US-CA/Data-Scientist_R{i}",
+              "locationsText": "US, CA, San Jose", "postedOn": "Posted Today"} for i in range(19)]
+    page1.append({"title": "Data Scientist", "externalPath": "/job/x/Data-Scientist_R99", "locationsText": "2 Locations",
+                  "postedOn": "Posted 2 Days Ago"})
+    page2 = [{"title": "Office Manager", "externalPath": f"/job/x/Office_R{i}", "locationsText": "Austin, TX"} for i in range(20)]
+    route = respx.post(f"{api}/jobs").mock(side_effect=[httpx.Response(200, json={"jobPostings": page1}),
+                                                       httpx.Response(200, json={"jobPostings": page2})])
+    with httpx.Client() as client:
+        jobs = workday.list_jobs(client, "acme.wd5.External", ["Data Scientist"])
+    assert route.call_count == 2  # page two had no matching titles, so the search stopped there
+    assert len(jobs) == 20 and jobs[0].id == "workday:acme.wd5.External:Data-Scientist_R0" and jobs[0].country == "US"
+    many = jobs[-1]
+    assert many.location is None and many.country is None  # "2 Locations": read from the job page instead
+    assert many.url == "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/Data-Scientist_R99"
+
+    respx.get(f"{api}/job/x/Data-Scientist_R99").mock(return_value=httpx.Response(200, json={"jobPostingInfo": {
+        "jobDescription": "<p>Build models</p>", "location": "Austin, TX", "additionalLocations": ["Toronto"],
+        "startDate": "2026-10-26", "jobRequisitionLocation": {"country": {"alpha2Code": "US"}}}}))
+    with httpx.Client() as client:
+        info = workday.details(client, many.board, many.url)
+    assert info == {"description": "Build models", "location": "Austin, TX | Toronto", "country": "US",
+                    "remote": False, "posted_at": "2026-10-26"}

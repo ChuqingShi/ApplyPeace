@@ -1,4 +1,4 @@
-"""Find which ATS board (Greenhouse, Ashby, Lever) a company uses, and verify ownership.
+"""Find which ATS board (Greenhouse, Ashby, Lever, Workday) a company uses, and verify ownership.
 
 A board only counts once its owner name matches the company. That keeps every
 posting official: a slug collision with an unrelated employer is rejected.
@@ -6,6 +6,7 @@ posting official: a slug collision with an unrelated employer is rejected.
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 
@@ -104,7 +105,71 @@ def _lever(client: httpx.Client, slug: str) -> tuple[str | None, int] | None:
     return name, count
 
 
-PROBES = {"greenhouse": _greenhouse, "ashby": _ashby, "lever": _lever}
+# Workday hosts each employer on one numbered pod; these cover nearly all of them.
+WORKDAY_PODS = ("wd1", "wd5", "wd3", "wd12", "wd10", "wd2", "wd103", "wd501", "wd108", "wd4", "wd6", "wd101")
+WORKDAY_COMMON_SITES = ("External", "Careers", "External_Careers", "{T}Careers", "{T}_Careers", "{T}External",
+                        "ExternalCareerSite", "Search")
+# Career sites that aren't the main one for experienced hires.
+WORKDAY_SKIP_SITE = re.compile(r"intern|internal|contractor|alumni|employee|campus|student|university|grad", re.I)
+
+
+def _workday_sites(client: httpx.Client, tenant: str) -> tuple[str, list[str]] | None:
+    """The tenant's pod and its career site names, from the robots.txt each Workday host publishes."""
+    for pod in WORKDAY_PODS:
+        resp = client.get(f"https://{tenant}.{pod}.myworkdayjobs.com/robots.txt")
+        if resp.status_code == 200 and "Sitemap" in resp.text:
+            return pod, re.findall(r"myworkdayjobs\.com/([^/\s]+)/siteMap\.xml", resp.text)
+        if resp.status_code == 401:  # the tenant lives here but hides its site list: try the usual names
+            return pod, [s.replace("{T}", t) for s in WORKDAY_COMMON_SITES for t in dict.fromkeys(
+                [tenant, tenant.capitalize(), tenant.upper()])]
+    return None
+
+
+def _workday_total(client: httpx.Client, tenant: str, pod: str, site: str) -> int:
+    resp = client.post(f"https://{tenant}.{pod}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs",
+                       json={"appliedFacets": {}, "limit": 1, "offset": 0, "searchText": ""})
+    return int(resp.json().get("total") or 0) if resp.status_code == 200 else 0
+
+
+def _workday_page(client: httpx.Client, tenant: str, pod: str, site: str) -> tuple[str | None, str]:
+    """(employer name from the page title, the page's title and description text)."""
+    page = client.get(f"https://{tenant}.{pod}.myworkdayjobs.com/en-US/{site}")
+    if page.status_code != 200:
+        return None, ""
+    meta = dict(re.findall(r'property="og:(title|description)" content="([^"]*)"', page.text))
+    title = html.unescape(meta.get("title", ""))
+    name = re.sub(r"\b(careers?|jobs?|at|join|us|with|work|search|opportunities|external|site|portal|the)\b|[^\w&.' -]",
+                  " ", title, flags=re.I)
+    return " ".join(name.split()) or None, f"{title} {html.unescape(meta.get('description', ''))}"
+
+
+def _workday(client: httpx.Client, slug: str, company: str) -> tuple[str | None, int, str, str] | None:
+    """Find the company's main Workday site. Verified when the tenant is the company's full name,
+    the site's title names the company, or (for a first-word tenant like "abbott") the site
+    describes itself with that word and is a real, busy site."""
+    if not re.fullmatch(r"[a-z0-9]+", slug):
+        return None
+    found = _workday_sites(client, slug)
+    if not found:
+        return None
+    pod, sites = found
+    best = max(((_workday_total(client, slug, pod, site), site) for site in dict.fromkeys(sites[:24])
+                if not WORKDAY_SKIP_SITE.search(site)), default=(0, ""))
+    if not best[0]:
+        return None
+    count, site = best
+    owner, text = _workday_page(client, slug, pod, site)
+    words = normalize(company).split()
+    level = match_level(owner, company)
+    if slug == "".join(words):
+        level = "exact"
+    elif level == "none" and words and slug == words[0] and count >= MIN_JOBS_FOR_LARGE_COMPANY \
+            and re.search(rf"\b{re.escape(words[0])}\b", normalize(text)):
+        level = "exact"
+    return owner or company if level != "none" else owner, count, f"{slug}.{pod}.{site}", level
+
+
+PROBES = {"greenhouse": _greenhouse, "ashby": _ashby, "lever": _lever, "workday": _workday}
 
 
 def find_board(
@@ -124,18 +189,21 @@ def find_board(
     for slug in slug_candidates(name, ticker, website):
         for ats, probe in PROBES.items():
             try:
-                found = probe(client, slug)
+                found = probe(client, slug, name) if ats == "workday" else probe(client, slug)
             except (httpx.HTTPError, ValueError):
                 continue
             if not found:
                 continue
-            owner, count = found
-            level = match_level(owner, name)
+            if ats == "workday":
+                owner, count, board_name, level = found
+            else:
+                (owner, count), board_name = found, slug
+                level = match_level(owner, name)
             if count == 0 or level == "none":
                 continue
             if level == "exact" and large and count < MIN_JOBS_FOR_LARGE_COMPANY:
                 level = "likely"
-            board = Board(ats, slug, owner, level, count)
+            board = Board(ats, board_name, owner, level, count)
             if board.verified:
                 return board
             likely = likely or board

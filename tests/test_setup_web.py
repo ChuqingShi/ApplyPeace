@@ -211,7 +211,7 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
 
     sent = []
     monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg) or True)
-    monkeypatch.setattr(pipeline, "discover", lambda conn, companies: DiscoverResult())
+    monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None: DiscoverResult())
     monkeypatch.setattr(pipeline, "rank", lambda p, conn, log: RankResult())
     monkeypatch.setattr(pipeline, "select_batch", lambda p, conn: [])
     monkeypatch.setattr(pipeline, "prepare_queue", lambda p, conn, log: {"prepared": 0})
@@ -258,3 +258,29 @@ def test_quick_reject_from_skipped_by_ai(client):
         assert tuple(conn.execute("SELECT status, status_reason FROM jobs").fetchone()) == ("rejected", "visa / sponsorship")
     assert review.suggest_reason({"concerns": ["Needs 8+ years of experience"]}) == "too_senior"
     assert review.suggest_reason(None) == "other"
+
+
+def test_workday_jobs_are_yours_to_apply_and_never_auto_approved(client):
+    from applypeace import review
+    from applypeace.apply.runner import apply_one
+    from applypeace.db import connect, now
+    from applypeace.forms import questions_for
+
+    c, p = client
+    profile.add_resume(p, FIXTURES / "sample_resume.pdf", "Data analyst")
+    with connect(p.db) as conn:
+        conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status, resume_key)"
+                     " VALUES ('workday:acme.wd5.Ext:R1','acme','workday','acme.wd5.Ext','R1','Analyst',"
+                     " 'https://acme.wd5.myworkdayjobs.com/en-US/Ext/job/x/R1',?,?,'queued','data-analyst')", (now(), now()))
+        conn.commit()
+        assert questions_for(None, conn.execute("SELECT * FROM jobs").fetchone()) == []
+        assert review.approve_ready(p, conn) == 0
+        from applypeace import approval
+        approval.approve(p, conn, "workday:acme.wd5.Ext:R1")
+        assert apply_one(p, conn, "workday:acme.wd5.Ext:R1") == "needs_you"  # never crashes if one slips through
+        conn.execute("UPDATE jobs SET status='queued'")
+        conn.commit()
+    conn.close()
+    html = c.get("/jobs/workday:acme.wd5.Ext:R1").text
+    assert "Workday site" in html and "Open the application" in html and "Skip for now" in html
+    assert "<details class=\"card\" open>" in html and "/resumes/data-analyst" in html

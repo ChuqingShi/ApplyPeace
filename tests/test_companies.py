@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import httpx
+import respx
+
 from applypeace.companies import registry as reg
 from applypeace.companies.ats import slug_candidates
 from applypeace.companies.lists import Member, parse_nasdaq100_wikitext, read_csv
@@ -89,3 +92,32 @@ def test_enabled_respects_toggles():
     reg.add_custom(registry, "Anthropic", "greenhouse", "anthropic")
     settings = {"lists": {"sp500": False, "custom": True}}
     assert [c["name"] for c in reg.enabled(registry, settings)] == ["Anthropic"]
+
+
+@respx.mock
+def test_find_board_finds_and_verifies_a_workday_site():
+    from applypeace.companies import ats
+
+    respx.route(host__regex=r".*(greenhouse|ashbyhq|lever)\..*").mock(return_value=httpx.Response(404))
+    respx.get(url__regex=r"https://acmerobotics\.wd(?!3\.).*robots\.txt").mock(return_value=httpx.Response(422))
+    respx.get("https://acmerobotics.wd3.myworkdayjobs.com/robots.txt").mock(return_value=httpx.Response(200, text=(
+        "Sitemap: https://acmerobotics.wd3.myworkdayjobs.com/Acme_Interns/siteMap.xml\n"
+        "Sitemap: https://acmerobotics.wd3.myworkdayjobs.com/Acme_External/siteMap.xml\n")))
+    respx.post("https://acmerobotics.wd3.myworkdayjobs.com/wday/cxs/acmerobotics/Acme_External/jobs").mock(
+        return_value=httpx.Response(200, json={"total": 340}))
+    respx.get("https://acmerobotics.wd3.myworkdayjobs.com/en-US/Acme_External").mock(
+        return_value=httpx.Response(200, text='<meta property="og:description" content="Acme Robotics builds robots.">'))
+    respx.route(host__regex=r"^acme\..*").mock(return_value=httpx.Response(422))
+    with httpx.Client() as client:
+        board = ats.find_board(client, "Acme Robotics", large=True)
+    assert (board.ats, board.board, board.match, board.job_count) == ("workday", "acmerobotics.wd3.Acme_External", "exact", 340)
+
+
+def test_companies_missed_before_workday_are_looked_up_again():
+    from datetime import date
+
+    from applypeace.companies import registry as reg
+
+    old = {"key": "a", "name": "A", "ats": "not_found", "resolved_at": str(date.today())}
+    assert reg.needs_resolution(old)
+    assert not reg.needs_resolution({**old, "resolver": reg.RESOLVER_VERSION})

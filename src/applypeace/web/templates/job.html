@@ -28,8 +28,16 @@ H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif
 </div>
 {% endif %}
 
+{% if self_apply and job.status not in ('submitted', 'closed', 'rejected') %}
+<div class="card warn"><strong>Apply on {{ company }}'s {{ job.ats|title }} site</strong><br>
+{{ job.ats|title }} needs an account with each company, so ApplyPeace can't send this one for you.
+Apply there{% for res in resumes if res.key == current_resume %} with your <a href="/resumes/{{ res.key }}" target="_blank" rel="noopener">{{ res.label }}</a> resume{% endfor %},
+then record it below so it lands in your history.
+<p style="margin:10px 0 0"><a class="btn" style="display:block" href="{{ job.url }}" target="_blank" rel="noopener">Open the application</a></p></div>
+{% endif %}
+
 {% if job.status != 'submitted' %}
-<details class="card"><summary><strong>I applied to this myself</strong> <span class="hint">outside ApplyPeace</span></summary>
+<details class="card" {{ 'open' if self_apply }}><summary><strong>I applied to this myself</strong> <span class="hint">outside ApplyPeace</span></summary>
 <form method="post" action="/jobs/{{ job.id }}/applied-myself"><input type="hidden" name="_token" value="{{ token }}">
 <label>Date applied</label><input type="text" name="applied_on" value="{{ today }}" inputmode="numeric">
 <label>Resume you used</label><select name="resume_key"><option value="">Not sure / other</option>
@@ -98,7 +106,9 @@ H-1B: {{ h1b }}{% if job.posted_at %} · posted {{ job.posted_at[:10] }}{% endif
 <input type="text" name="instruction" placeholder='e.g. "shorter, mention my SQL project"'>
 <button class="secondary" type="submit">Redraft with AI</button></form>
 {% endfor %}
+{% endif %}
 
+{% if rows or job.status == 'queued' %}
 <div class="row">
 <form method="post" action="/jobs/{{ job.id }}/skip"><input type="hidden" name="_token" value="{{ token }}"><button class="secondary" type="submit">Skip for now</button></form>
 </div>

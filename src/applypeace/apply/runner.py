@@ -75,6 +75,9 @@ def apply_one(p: Paths, conn: sqlite3.Connection, job_id: str, dry_run: bool | N
         approval.revoke(conn, job_id, why)
         return "queued"
     job = dict(conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
+    if job["ats"] not in FILLERS:
+        _record(conn, job_id, "needs_you", f"ApplyPeace can't submit {job['ats'].title()} forms yet: apply on the site yourself.")
+        return "needs_you"
     filler = FILLERS[job["ats"]]
     rows = ans.load(conn, job_id)
     appr = conn.execute("SELECT resume_key FROM approvals WHERE job_id=?", (job_id,)).fetchone()

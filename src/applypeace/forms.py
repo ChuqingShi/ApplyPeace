@@ -186,4 +186,6 @@ def questions_for(client: httpx.Client, job) -> list[Question]:
         return ashby_questions(client, job["board"], job["ats_job_id"])
     if job["ats"] == "lever":
         return lever_questions(client, job["apply_url"] or job["url"] + "/apply")
+    if job["ats"] == "workday":
+        return []  # Workday forms sit behind a per-company account: you apply on the site yourself
     raise ValueError(f"unsupported ATS {job['ats']}")

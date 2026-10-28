@@ -136,7 +136,11 @@ Candidate resume: {resume[:8000]}"""
 def approve_ready(p: Paths, conn: sqlite3.Connection) -> int:
     """Approve every queued job that has all required answers (Approve all remaining)."""
     count = 0
-    for row in conn.execute("SELECT id FROM jobs WHERE status='queued'").fetchall():
+    from .companies.registry import AUTO_APPLY_ATS
+
+    for row in conn.execute("SELECT id, ats FROM jobs WHERE status='queued'").fetchall():
+        if row["ats"] not in AUTO_APPLY_ATS:
+            continue  # e.g. Workday: you apply on the site yourself
         if not ans.missing_required(ans.load(conn, row["id"])):
             approval.approve(p, conn, row["id"])
             count += 1

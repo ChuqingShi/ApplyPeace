@@ -49,7 +49,7 @@ def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
     settings = load_settings(p)
     started = now()
     with connect(p.db) as conn:
-        found = discover(conn, reg.enabled(reg.load(p), settings))
+        found = discover(conn, reg.enabled(reg.load(p), settings), settings["targets"]["titles"])
         log(f"Scanned {found.boards} boards: {found.new} new jobs, {found.closed} closed.")
         ranked = rank(p, conn, log=log)
         log(f"{ranked.candidates} jobs passed the filters; AI judged {ranked.judged}.")

@@ -526,7 +526,7 @@ def home_context(p: config.Paths, conn) -> dict:
         "ai_skipped": [c for c in cards("status='candidate' AND judge IS NOT NULL", "final_score DESC", 200)
                        if c["judge"]["recommendation"] == "skip"][:20],
         "today": conn.execute("SELECT COUNT(*) FROM applications WHERE status='submitted' AND substr(finished_at,1,10)=date('now')").fetchone()[0],
-        "ready_count": sum(1 for c in batch if c["missing"] == 0),
+        "ready_count": sum(1 for c in batch if c["missing"] == 0 and c["job"]["ats"] in reg.AUTO_APPLY_ATS),
     }
 
 
@@ -560,6 +560,7 @@ def job_context(p: config.Paths, conn, job_id: str) -> dict:
         "h1b": h1b_note(record),
         "summary": (job["description"] or "")[:900],
         "reasons": review.REASON_TAGS,
+        "self_apply": job["ats"] not in reg.AUTO_APPLY_ATS,
         "suggested_reason": review.suggest_reason(json.loads(job["judge"]) if job["judge"] else None),
         "is_selected": lambda row, value: str(value) in [str(v) for v in (row["value"] if isinstance(row["value"], list) else [row["value"]])],
     }

@@ -3,5 +3,6 @@
   <div class="muted">{{ c.company }} · {{ c.job.location or 'Location n/a' }}{% if c.job.posted_at %} · posted {{ c.job.posted_at[:10] }}{% endif %}</div>
   {% if c.judge %}<div class="rec rec-{{ c.judge.recommendation }}">{{ c.judge.recommendation|upper }}</div>{% endif %}
   {% if c.resume %}<div class="muted small">Resume: {{ c.resume }}</div>{% endif %}
+  {% if c.job.ats == 'workday' %}<div class="muted small">Workday: you apply on the site</div>{% endif %}
   {% if c.missing %}<div class="warn">{{ c.missing }} question{{ 's' if c.missing > 1 }} for you</div>{% endif %}
 </a>

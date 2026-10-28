@@ -32,7 +32,7 @@ def cmd_lists_show(args, p: config.Paths) -> int:
         _out(f"  [{state}] {label:32s} {detail}   ({key})")
     on = reg.enabled(registry, settings)
     ready = [c for c in on if c.get("verified") and c.get("ats") in reg.SUPPORTED_ATS]
-    _out(f"\nEnabled total: {len(on)} unique companies, {len(ready)} with a verified Greenhouse/Ashby/Lever board.")
+    _out(f"\nEnabled total: {len(on)} unique companies, {len(ready)} with a verified Greenhouse/Ashby/Lever/Workday board.")
     _out(f"Job location: {settings['job_location']}   H-1B filter: {'on' if settings['h1b_filter'] else 'off'}")
     return 0
 
@@ -100,7 +100,7 @@ def cmd_lists_resolve(args, p: config.Paths) -> int:
     registry = reg.load(p)
     targets = reg.enabled(registry, settings) if not args.all else list(registry.values())
     todo = [c for c in targets if reg.needs_resolution(c)]
-    _out(f"Looking up job boards for {len(todo)} companies (Greenhouse, Ashby, Lever)...")
+    _out(f"Looking up job boards for {len(todo)} companies (Greenhouse, Ashby, Lever, Workday)...")
 
     def progress(i, total, company):
         if company.get("verified"):
@@ -149,7 +149,7 @@ def cmd_discover(args, p: config.Paths) -> int:
     settings = config.load_settings(p)
     companies = reg.enabled(reg.load(p), settings)
     with connect(p.db) as conn:
-        result = discover(conn, companies)
+        result = discover(conn, companies, settings["targets"]["titles"])
     _out(f"Read {result.boards} boards: {result.seen} open jobs, {result.new} new, {result.closed} closed.")
     for error in result.errors[:10]:
         _out(f"  ! {error}")
@@ -539,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("name")
     add.add_argument("--board", help="e.g. greenhouse:anthropic, ashby:openai, lever:palantir")
     add.set_defaults(func=cmd_lists_add)
-    res = lsub.add_parser("resolve", help="find each enabled company's Greenhouse/Ashby/Lever board")
+    res = lsub.add_parser("resolve", help="find each enabled company's Greenhouse/Ashby/Lever/Workday board")
     res.add_argument("--all", action="store_true", help="resolve every company, not just enabled lists")
     res.set_defaults(func=cmd_lists_resolve)
     conf = lsub.add_parser("confirm", help="accept or reject near-match job boards")

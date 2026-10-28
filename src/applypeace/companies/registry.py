@@ -16,7 +16,11 @@ from ..sources.base import http_client
 from .lists import Member
 from .names import key_for, normalize
 
-SUPPORTED_ATS = ("greenhouse", "ashby", "lever")
+SUPPORTED_ATS = ("greenhouse", "ashby", "lever", "workday")
+# Job systems ApplyPeace can fill and submit for you; for the others you apply yourself.
+AUTO_APPLY_ATS = ("greenhouse", "ashby", "lever")
+# Bump when the board finder learns a new job system, so companies it missed are looked up again.
+RESOLVER_VERSION = 2
 # Lists of large companies, where a tiny board usually belongs to someone else.
 LARGE_COMPANY_LISTS = {"fortune500", "sp500", "nasdaq100", "forbes_global2000_us", "forbes_global2000_intl"}
 
@@ -103,6 +107,8 @@ def needs_resolution(company: dict, refresh_days: int = 30) -> bool:
     resolved = company.get("resolved_at")
     if not resolved:
         return True
+    if company.get("ats") == "not_found" and company.get("resolver", 1) < RESOLVER_VERSION:
+        return True
     stale = date.fromisoformat(resolved) < date.today() - timedelta(days=refresh_days)
     return stale and company.get("ats") not in SUPPORTED_ATS
 
@@ -120,6 +126,7 @@ def resolve(registry: dict[str, dict], companies: list[dict], workers: int = 8, 
     with cf.ThreadPoolExecutor(workers) as pool:
         for i, (company, board) in enumerate(pool.map(work, todo), 1):
             company["resolved_at"] = str(date.today())
+            company["resolver"] = RESOLVER_VERSION
             if board is None:
                 company.update(ats="not_found", board=None, verified=False, owner_name=None, job_count=0)
                 company.pop("confirm", None)
