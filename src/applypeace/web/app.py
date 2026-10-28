@@ -409,8 +409,8 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings = config.load_settings(p)
         settings["scans_paused"] = not settings.get("scans_paused")
         config.save_settings(settings, p)
-        return go("/?msg=" + ("Scheduled scans paused. Scan now still works." if settings["scans_paused"]
-                              else "Scheduled scans are back on."))
+        return go("/?msg=" + ("Scheduled scans are off. Scan now still works." if settings["scans_paused"]
+                              else "Scheduled scans are on again; the next one runs at its usual time."))
 
     @app.post("/pause")
     async def pause(request: Request):

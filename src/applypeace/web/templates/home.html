@@ -5,7 +5,7 @@
 <div class="statusbar">
   <span>{{ today }} sent today · cap {{ settings.daily_cap }} · {{ 'automatic' if settings.submit_mode == 'auto' else 'dry run (nothing is sent)' }}</span>
   <form method="post" action="/pause-scans"><input type="hidden" name="_token" value="{{ token }}">
-  <button class="{{ 'secondary' if not settings.scans_paused }} small" type="submit">{{ 'Resume scans' if settings.scans_paused else 'Pause scans' }}</button></form>
+  <button class="{{ 'secondary' if not settings.scans_paused }} small" type="submit">{{ 'Turn on scheduled scans' if settings.scans_paused else 'Turn off scheduled scans' }}</button></form>
 </div>
 <form method="post" action="/scan-now" style="margin:.5rem 0"><input type="hidden" name="_token" value="{{ token }}">
 <button type="submit" {{ 'disabled' if scanning }}>{{ 'Scanning…' if scanning else 'Scan now' }}</button>
@@ -14,7 +14,7 @@
 <form method="post" action="/scan-stop"><input type="hidden" name="_token" value="{{ token }}">
 <button class="secondary small" type="submit">Stop scan</button>
 {% elif last_scan %}<span class="muted small"> Last scan {{ last_scan.at }}: {{ last_scan.added }} new for you.</span>{% endif %}</form>
-{% if settings.scans_paused %}<div class="card warn">Scheduled scans are paused. Scan now still works.</div>{% endif %}
+{% if settings.scans_paused %}<div class="card warn">Scheduled scans are off: nothing scans on its own. Scan now still works.</div>{% endif %}
 {% if settings.paused %}<div class="card warn">Sending is on hold: jobs you approve wait here instead of being submitted.
 <form method="post" action="/pause" style="margin-top:8px"><input type="hidden" name="_token" value="{{ token }}">
 <button class="small" type="submit">Start sending again</button></form></div>{% endif %}
@@ -22,7 +22,7 @@
 {% if needs_you %}<h2 class="bad">Needs you</h2>{% for c in needs_you %}{% include "_card.html" %}{% endfor %}{% endif %}
 
 <h2>Today's batch {% if batch %}<span class="muted">({{ batch|length }})</span>{% endif %}</h2>
-{% for c in batch %}{% include "_card.html" %}{% else %}<p class="muted">Nothing new to review. {{ 'Scheduled scans are paused.' if settings.scans_paused else 'The next scan runs ' ~ next_scan ~ '.' }}</p>{% endfor %}
+{% for c in batch %}{% include "_card.html" %}{% else %}<p class="muted">Nothing new to review. {{ 'Scheduled scans are off.' if settings.scans_paused else 'The next scan runs ' ~ next_scan ~ '.' }}</p>{% endfor %}
 {% if ready_count %}
 <form method="post" action="/approve-all"><input type="hidden" name="_token" value="{{ token }}">
 <button type="submit">Approve all {{ ready_count }} ready jobs</button></form>
