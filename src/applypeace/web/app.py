@@ -81,7 +81,8 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         with connect(p.db) as conn:
             from .. import schedule
 
-            return render(request, "home.html", msg=msg, scanning=schedule.scanning(p), **home_context(p, conn))
+            return render(request, "home.html", msg=msg, scanning=schedule.scanning(p),
+                          next_scan=schedule.next_scan(config.load_settings(p)), **home_context(p, conn))
 
     # ------------------------------------------------------------ setup: choices
 

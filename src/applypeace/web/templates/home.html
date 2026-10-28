@@ -15,7 +15,7 @@
 {% if needs_you %}<h2 class="bad">Needs you</h2>{% for c in needs_you %}{% include "_card.html" %}{% endfor %}{% endif %}
 
 <h2>Today's batch {% if batch %}<span class="muted">({{ batch|length }})</span>{% endif %}</h2>
-{% for c in batch %}{% include "_card.html" %}{% else %}<p class="muted">Nothing new to review. The next scan runs automatically.</p>{% endfor %}
+{% for c in batch %}{% include "_card.html" %}{% else %}<p class="muted">Nothing new to review. The next scan runs {{ next_scan }}.</p>{% endfor %}
 {% if ready_count %}
 <form method="post" action="/approve-all"><input type="hidden" name="_token" value="{{ token }}">
 <button type="submit">Approve all {{ ready_count }} ready jobs</button></form>

@@ -9,7 +9,9 @@ import shutil
 import socket
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from .config import Paths, load_settings
 
@@ -84,6 +86,21 @@ def parse_times(text: str) -> list[str]:
             raise ValueError(f"'{token}' isn't a valid time")
         out.append(f"{h:02d}:{mnt:02d}")
     return sorted(set(out))
+
+
+def next_scan(settings: dict, now: datetime | None = None) -> str:
+    """When the next scheduled scan runs, e.g. "today at 2:30 PM PDT" or "tomorrow at 6:30 AM PDT"."""
+    tz = ZoneInfo(zones_of(settings)[1])
+    now = (now or datetime.now(tz)).astimezone(tz)
+    times = settings.get("scan_times") or scan_times(settings["notify_time"], settings["scan_interval_hours"])
+    for days, word in ((0, "today"), (1, "tomorrow")):
+        day = now.date() + timedelta(days=days)
+        for t in sorted(times):
+            h, m = (int(x) for x in t.split(":"))
+            when = datetime(day.year, day.month, day.day, h, m, tzinfo=tz)
+            if when > now:
+                return f"{word} at {when.strftime('%-I:%M %p %Z')}"
+    return "on schedule"
 
 
 def routines(p: Paths, port: int = 8765) -> list[dict]:

@@ -219,3 +219,15 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
     sent.clear()
     pipeline.cycle(p, log=lambda *a: None, trigger="scheduled")
     assert sent == []  # scheduled scans stay quiet when nothing is new
+
+
+def test_next_scan_time():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from applypeace.schedule import next_scan
+
+    s = {**config.DEFAULT_SETTINGS, "scan_timezone": "America/Los_Angeles", "scan_times": ["06:30", "14:30", "22:30"]}
+    at = lambda h, m: datetime(2026, 10, 28, h, m, tzinfo=ZoneInfo("America/Los_Angeles"))
+    assert next_scan(s, at(9, 0)) == "today at 2:30 PM PDT"
+    assert next_scan(s, at(22, 30)) == "tomorrow at 6:30 AM PDT"
