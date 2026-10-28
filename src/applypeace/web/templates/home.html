@@ -5,14 +5,16 @@
 <div class="statusbar">
   <span>{{ today }} sent today · cap {{ settings.daily_cap }} · {{ 'automatic' if settings.submit_mode == 'auto' else 'dry run (nothing is sent)' }}</span>
   <form method="post" action="/pause"><input type="hidden" name="_token" value="{{ token }}">
-  <button class="{{ 'secondary' if not settings.paused }} small" type="submit">{{ 'Resume' if settings.paused else 'Pause' }}</button></form>
+  <button class="{{ 'secondary' if not settings.paused }} small" type="submit">{{ 'Resume applying' if settings.paused else 'Pause applying' }}</button></form>
 </div>
 <form method="post" action="/scan-now" style="margin:.5rem 0"><input type="hidden" name="_token" value="{{ token }}">
 <button type="submit" {{ 'disabled' if scanning }}>{{ 'Scanning…' if scanning else 'Scan now' }}</button>
-{% if scanning %}<span class="muted small"> Usually under a minute. This page updates by itself.</span>
-<script>setTimeout(() => location.replace("/"), 5000)</script>
+{% if scanning %}<div class="muted small" style="margin-top:4px">{{ scan_stage or 'Starting' }}… A full scan takes several minutes; this page updates by itself.</div>
+<script>setTimeout(() => location.replace("/"), 5000)</script></form>
+<form method="post" action="/scan-stop"><input type="hidden" name="_token" value="{{ token }}">
+<button class="secondary small" type="submit">Stop scan</button>
 {% elif last_scan %}<span class="muted small"> Last scan {{ last_scan.at }}: {{ last_scan.added }} new for you.</span>{% endif %}</form>
-{% if settings.paused %}<div class="card warn">Paused: nothing will be submitted until you resume.</div>{% endif %}
+{% if settings.paused %}<div class="card warn">Applying is paused: scans still run and fill your batch, but nothing is submitted until you tap Resume applying.</div>{% endif %}
 
 {% if needs_you %}<h2 class="bad">Needs you</h2>{% for c in needs_you %}{% include "_card.html" %}{% endfor %}{% endif %}
 

@@ -64,7 +64,7 @@ def judged_today(conn: sqlite3.Connection) -> int:
     ).fetchone()[0]
 
 
-def rank(p: Paths, conn: sqlite3.Connection, log=print) -> RankResult:
+def rank(p: Paths, conn: sqlite3.Connection, log=print, progress=None) -> RankResult:
     settings = load_settings(p)
     registry = reg.load(p)
     companies = reg.enabled(registry, settings)
@@ -122,17 +122,18 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print) -> RankResult:
                 return job, None, exc
 
         with cf.ThreadPoolExecutor(JUDGE_WORKERS) as pool:
-            verdicts = list(pool.map(judge, todo))
-        for job, verdict, exc in verdicts:
-            if exc:
-                result.judge_errors += 1
-                log(f"Judge unavailable ({exc}); remaining jobs use keyword ranking.")
-                break
-            conn.execute("UPDATE jobs SET judge=?, resume_key=? WHERE id=?",
-                         (json.dumps(verdict), verdict["resume_key"], job["id"]))
-            log_event(conn, "judge", job["id"], {"score": verdict["score"], "rec": verdict["recommendation"]})
-            conn.commit()
-            result.judged += 1
+            for job, verdict, exc in pool.map(judge, todo):
+                if exc:
+                    result.judge_errors += 1
+                    log(f"Judge unavailable ({exc}); remaining jobs use keyword ranking.")
+                    break
+                conn.execute("UPDATE jobs SET judge=?, resume_key=? WHERE id=?",
+                             (json.dumps(verdict), verdict["resume_key"], job["id"]))
+                log_event(conn, "judge", job["id"], {"score": verdict["score"], "rec": verdict["recommendation"]})
+                conn.commit()
+                result.judged += 1
+                if progress:
+                    progress(result.judged, len(todo))
 
     # Final score for every candidate.
     for job in conn.execute("SELECT * FROM jobs WHERE status='candidate'").fetchall():

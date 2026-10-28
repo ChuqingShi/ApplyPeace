@@ -83,7 +83,9 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             from .. import schedule
 
             settings = config.load_settings(p)
-            return render(request, "home.html", msg=msg, scanning=schedule.scanning(p),
+            from ..pipeline import scan_status
+
+            return render(request, "home.html", msg=msg, scanning=schedule.scanning(p), scan_stage=scan_status(p).get("stage"),
                           next_scan=schedule.next_scan(settings),
                           last_scan=schedule.last_scan(conn, schedule.zones_of(settings)[1]), **home_context(p, conn))
 
@@ -416,6 +418,14 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         await check(request)
         schedule.scan_now(p)
         return go("/")  # the home page shows "Scanning…" and refreshes itself until the scan is done
+
+    @app.post("/scan-stop")
+    async def scan_stop(request: Request):
+        from .. import schedule
+
+        await check(request)
+        stopped = schedule.stop_scan(p)
+        return go("/?msg=" + ("Scan stopped. Jobs it already found are kept." if stopped else "No scan was running."))
 
     @app.get("/schedule", response_class=HTMLResponse)
     def schedule_page(request: Request, msg: str = ""):

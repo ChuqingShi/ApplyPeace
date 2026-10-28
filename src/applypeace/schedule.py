@@ -223,6 +223,24 @@ def scan_now(p: Paths) -> bool:
     return True
 
 
+def stop_scan(p: Paths) -> bool:
+    """Stop the running scan (a manual or scheduled one). Jobs it already saved are kept."""
+    import signal
+
+    from .pipeline import scan_status, status_path
+
+    pid = scan_status(p).get("pid")
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
+    except (OSError, TypeError):
+        return False
+    if " cycle" not in cmdline:  # only ever stop a scan
+        return False
+    os.kill(int(pid), signal.SIGTERM)
+    status_path(p).unlink(missing_ok=True)
+    return True
+
+
 def last_scan(conn, tz: str) -> dict | None:
     """When the latest scan finished and how many jobs it added."""
     import json

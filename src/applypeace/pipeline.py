@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import fcntl
+import json
+import os
 from contextlib import contextmanager
 from datetime import date
 
@@ -34,6 +36,22 @@ def single_run(p: Paths, name: str):
         yield True
 
 
+def status_path(p: Paths):
+    return p.home / ".scan_status.json"
+
+
+def set_status(p: Paths, stage: str) -> None:
+    """What the running scan is doing, for the home page ("AI scoring 12 of 30")."""
+    status_path(p).write_text(json.dumps({"stage": stage, "pid": os.getpid(), "at": now()}))
+
+
+def scan_status(p: Paths) -> dict:
+    try:
+        return json.loads(status_path(p).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def require_setup(p: Paths) -> None:
     missing = profile.completeness(p)
     if missing:
@@ -47,12 +65,23 @@ def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
     which jobs were added, and whether you were notified.
     """
     require_setup(p)
+    try:
+        return _cycle(p, log, trigger)
+    finally:
+        status_path(p).unlink(missing_ok=True)
+
+
+def _cycle(p: Paths, log, trigger: str) -> dict:
     settings = load_settings(p)
     started = now()
+    companies = reg.enabled(reg.load(p), settings)
+    set_status(p, f"Checking {sum(1 for c in companies if c.get('verified'))} company job sites")
     with connect(p.db) as conn:
-        found = discover(conn, reg.enabled(reg.load(p), settings), settings["targets"]["titles"], worth_reading(settings))
+        found = discover(conn, companies, settings["targets"]["titles"], worth_reading(settings))
         log(f"Scanned {found.boards} boards: {found.new} new jobs, {found.closed} closed.")
-        ranked = rank(p, conn, log=log)
+        set_status(p, f"Found {found.new} new postings. Filtering")
+        ranked = rank(p, conn, log=log, progress=lambda done, total: set_status(p, f"AI scoring {done} of {total} jobs"))
+        set_status(p, "Preparing your batch")
         log(f"{ranked.candidates} jobs passed the filters; AI judged {ranked.judged}.")
         queued = select_batch(p, conn)
         prepared = prepare_queue(p, conn, log=log)

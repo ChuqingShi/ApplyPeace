@@ -214,7 +214,7 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
     sent = []
     monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg) or True)
     monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None, wanted=None: DiscoverResult())
-    monkeypatch.setattr(pipeline, "rank", lambda p, conn, log: RankResult())
+    monkeypatch.setattr(pipeline, "rank", lambda p, conn, log, progress=None: RankResult())
     monkeypatch.setattr(pipeline, "select_batch", lambda p, conn: [])
     monkeypatch.setattr(pipeline, "prepare_queue", lambda p, conn, log: {"prepared": 0})
     pipeline.cycle(p, log=lambda *a: None, trigger="manual")
@@ -222,6 +222,11 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
     sent.clear()
     pipeline.cycle(p, log=lambda *a: None, trigger="scheduled")
     assert sent == []  # scheduled scans stay quiet when nothing is new
+    assert not pipeline.status_path(p).exists()  # the progress note is gone once a scan ends
+
+    pipeline.set_status(p, "AI scoring 3 of 10 jobs")
+    assert pipeline.scan_status(p)["stage"] == "AI scoring 3 of 10 jobs"
+    assert not schedule.stop_scan(p)  # this test process isn't a scan, so it is never killed
     from applypeace.db import connect
     with connect(p.db) as conn:
         assert schedule.last_scan(conn, "America/Los_Angeles")["added"] == 0
