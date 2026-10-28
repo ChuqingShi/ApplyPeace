@@ -392,7 +392,10 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings = config.load_settings(p)
         times = settings.get("scan_times") or schedule.scan_times(settings["notify_time"], settings["scan_interval_hours"])
         return render(request, "schedule.html", msg=msg, scan_list=times, slots=schedule.TIME_SLOTS,
-                      max_scans=schedule.MAX_SCANS, zones=schedule.common_zones(settings["timezone"]),
+                      max_scans=schedule.MAX_SCANS, notify_tz=schedule.zones_of(settings)[0],
+                      scan_tz=schedule.zones_of(settings)[1],
+                      notify_zones=schedule.common_zones(schedule.zones_of(settings)[0]),
+                      scan_zones=schedule.common_zones(schedule.zones_of(settings)[1]),
                       gaps=[1, 2, 3, 5, 10, 15, 30, 60])
 
     @app.post("/schedule")
@@ -410,12 +413,15 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             times = sorted({form.get(f"scan_{i}", "") for i in range(1, count + 1)} - {""})
             if notify not in valid or not times or not set(times) <= valid or not 1 <= count <= schedule.MAX_SCANS:
                 raise ValueError("Pick a notification time and at least one scan time")
-            tz = form.get("timezone", settings["timezone"])
-            try:
-                ZoneInfo(tz)
-            except (ZoneInfoNotFoundError, ValueError):
-                raise ValueError(f"'{tz}' isn't a time zone name like America/New_York")
-            settings.update(notify_time=notify, scan_times=times, timezone=tz,
+            zones = {}
+            for key in ("notify_timezone", "scan_timezone"):
+                tz = form.get(key, "") or schedule.zones_of(settings)[key == "scan_timezone"]
+                try:
+                    ZoneInfo(tz)
+                except (ZoneInfoNotFoundError, ValueError):
+                    raise ValueError(f"'{tz}' isn't a time zone name like America/New_York")
+                zones[key] = tz
+            settings.update(notify_time=notify, scan_times=times, timezone=zones["notify_timezone"], **zones,
                             apply_gap_seconds=max(60, int(form.get("apply_gap_minutes", 2)) * 60))
         except ValueError as exc:
             return go(f"/schedule?msg={exc}")

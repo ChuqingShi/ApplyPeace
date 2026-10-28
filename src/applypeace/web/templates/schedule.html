@@ -1,42 +1,58 @@
 {% extends "base.html" %}{% set title = "Schedule" %}
 {% block body %}
+<style>
+  .sched select { width: auto; min-width: 9rem; max-width: 100%; }
+  .sched .pair { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sched .scan-row { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
+  .sched .scan-row label { margin: 0; min-width: 4.5rem; font-weight: 400; }
+  .sched .scan-row[hidden], .tz-actions [hidden] { display: none; }
+  .tz-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .tz-actions button { flex: 0 1 auto; padding: 8px 12px; }
+</style>
 <p><a href="/">← Back</a></p>
 <h1>Schedule</h1>
 {% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
 <div class="card warn" id="tz-banner" hidden>
-Your device is set to <strong id="tz-device"></strong>, but ApplyPeace uses {{ settings.timezone }}.
-<button type="button" id="tz-use" style="margin-top:8px">Use my time zone</button></div>
-<form method="post" action="/schedule" id="schedule-form">
+Your device is set to <strong id="tz-device"></strong>.
+<div class="tz-actions">
+<button type="button" class="secondary" data-target="notify-tz" id="tz-notify-btn">Use for notifications</button>
+<button type="button" class="secondary" data-target="scan-tz" id="tz-scan-btn">Use for scans</button>
+</div></div>
+<form method="post" action="/schedule" id="schedule-form" class="sched">
 <input type="hidden" name="_token" value="{{ token }}">
 
-<label>Time zone</label>
-<select name="timezone" id="tz-input">
-{% for value, label in zones %}<option value="{{ value }}" {{ 'selected' if value == settings.timezone }}>{{ label }}</option>{% endfor %}
-</select>
-
-<label>Daily batch notification</label>
-<select name="notify_time">
+<h2>Batch notification</h2>
+<div class="pair">
+<select name="notify_time" aria-label="Notification time">
 {% for value, label in slots %}<option value="{{ value }}" {{ 'selected' if value == settings.notify_time }}>{{ label }}</option>{% endfor %}
 </select>
+<select name="notify_timezone" id="notify-tz" aria-label="Notification time zone">
+{% for value, label in notify_zones %}<option value="{{ value }}" {{ 'selected' if value == notify_tz }}>{{ label }}</option>{% endfor %}
+</select>
+</div>
 
 <h2>Scans</h2>
-<label>Scans per day</label>
-<select name="scan_count" id="scan-count">
-{% for n in range(1, max_scans + 1) %}<option value="{{ n }}" {{ 'selected' if n == scan_list|length }}>{{ n }}</option>{% endfor %}
+<div class="pair">
+<select name="scan_count" id="scan-count" aria-label="Scans per day">
+{% for n in range(1, max_scans + 1) %}<option value="{{ n }}" {{ 'selected' if n == scan_list|length }}>{{ n }} scan{{ 's' if n != 1 }} a day</option>{% endfor %}
 </select>
-<p class="muted small">Tip: one scan about 30 minutes before your notification keeps the morning batch fresh.</p>
+<select name="scan_timezone" id="scan-tz" aria-label="Scan time zone">
+{% for value, label in scan_zones %}<option value="{{ value }}" {{ 'selected' if value == scan_tz }}>{{ label }}</option>{% endfor %}
+</select>
+</div>
+<p class="muted small">Scans use their own time zone, so you can keep them on a home schedule while you travel.</p>
 {% for i in range(1, max_scans + 1) %}
 <div class="scan-row" data-i="{{ i }}" {{ 'hidden' if i > scan_list|length }}>
-<label>Scan {{ i }}</label>
-<select name="scan_{{ i }}">
+<label for="scan_{{ i }}">Scan {{ i }}</label>
+<select name="scan_{{ i }}" id="scan_{{ i }}">
 {% set current = scan_list[i - 1] if i <= scan_list|length else '' %}
 {% for value, label in slots %}<option value="{{ value }}" {{ 'selected' if value == current }}>{{ label }}</option>{% endfor %}
 </select></div>
 {% endfor %}
 
 <h2>Sending</h2>
-<label>Time between applications</label>
-<select name="apply_gap_minutes">
+<label for="gap">Time between applications</label>
+<select name="apply_gap_minutes" id="gap">
 {% set gap = (settings.apply_gap_seconds // 60) or 1 %}
 {% for g in gaps %}<option value="{{ g }}" {{ 'selected' if g == gap or (loop.first and gap < g) }}>{{ g }} minute{{ 's' if g != 1 }}</option>{% endfor %}
 </select>
@@ -62,16 +78,23 @@ Your device is set to <strong id="tz-device"></strong>, but ApplyPeace uses {{ s
   rows.forEach(function (row) { if (row.hidden) row.querySelector("select").disabled = true; });
 
   var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  var saved = {{ settings.timezone | tojson }};
-  if (!device || device === saved) return;
+  var current = { "notify-tz": {{ notify_tz | tojson }}, "scan-tz": {{ scan_tz | tojson }} };
+  if (!device) return;
+  var any = false;
+  ["notify-tz", "scan-tz"].forEach(function (id) {
+    var btn = document.querySelector('[data-target="' + id + '"]');
+    if (current[id] === device) { btn.hidden = true; return; }
+    any = true;
+    btn.onclick = function () {
+      var sel = document.getElementById(id);
+      if (!Array.from(sel.options).some(function (o) { return o.value === device; })) sel.add(new Option(device, device));
+      sel.value = device;
+      document.getElementById("schedule-form").submit();
+    };
+  });
+  if (!any) return;
   document.getElementById("tz-device").textContent = device;
   document.getElementById("tz-banner").hidden = false;
-  document.getElementById("tz-use").onclick = function () {
-    var sel = document.getElementById("tz-input");
-    if (!Array.from(sel.options).some(function (o) { return o.value === device; })) sel.add(new Option(device, device));
-    sel.value = device;
-    document.getElementById("schedule-form").submit();
-  };
 })();
 </script>
 {% endblock %}

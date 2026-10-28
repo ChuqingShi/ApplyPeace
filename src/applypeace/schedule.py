@@ -48,6 +48,12 @@ def common_zones(current: str) -> list[tuple[str, str]]:
     return COMMON_ZONES if any(z == current for z, _ in COMMON_ZONES) else [(current, current)] + COMMON_ZONES
 
 
+def zones_of(settings: dict) -> tuple[str, str]:
+    """(notification time zone, scan time zone); both fall back to the older single setting."""
+    base = settings.get("timezone", "America/Los_Angeles")
+    return settings.get("notify_timezone") or base, settings.get("scan_timezone") or base
+
+
 SCAN_LEAD_MINUTES = 30  # scan this long before the notification, so the batch is fresh
 
 
@@ -82,16 +88,16 @@ def parse_times(text: str) -> list[str]:
 
 def routines(p: Paths, port: int = 8765) -> list[dict]:
     settings = load_settings(p)
-    tz = settings.get("timezone", "America/Los_Angeles")
+    notify_tz, scan_tz = zones_of(settings)
     times = settings.get("scan_times") or scan_times(settings["notify_time"], settings["scan_interval_hours"])
     scans = [
         {"name": f"{PREFIX}cycle-{i}", "command": _ap("cycle", p), "type": "daily", "time": t,
-         "timezone": tz, "timeout": 3600}
+         "timezone": scan_tz, "timeout": 3600}
         for i, t in enumerate(times, 1)
     ]
     return scans + [
         {"name": PREFIX + "digest", "command": _ap("digest", p), "type": "daily", "time": settings["notify_time"],
-         "timezone": tz, "timeout": 300},
+         "timezone": notify_tz, "timeout": 300},
         {"name": PREFIX + "apply", "command": _ap("apply --max 1", p), "type": "interval", "interval": 600,
          "timeout": 1800},  # one application per tick keeps them spaced; 30 min covers a code wait
         {"name": PREFIX + "web", "command": _ap(f"serve --background --port {port}", p), "type": "interval",

@@ -108,16 +108,19 @@ def test_schedule_page_saves_custom_times(client):
     html = c.get("/schedule").text
     assert 'name="scan_count"' in html and "7:30 AM" in html and 'id="tz-banner"' in html
     t = token(html)
-    c.post("/schedule", data={"_token": t, "timezone": "America/New_York", "notify_time": "07:00",
-                              "scan_count": "4", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",
+    c.post("/schedule", data={"_token": t, "notify_timezone": "America/New_York", "notify_time": "07:00",
+                              "scan_timezone": "Asia/Tokyo", "scan_count": "4", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",
                               "scan_4": "23:30", "apply_gap_minutes": "3"})
     s = config.load_settings(p)
     assert s["notify_time"] == "07:00" and s["scan_times"] == ["06:30", "12:00", "18:00", "23:30"]
-    assert s["apply_gap_seconds"] == 180 and s["timezone"] == "America/New_York"
-    assert [r["time"] for r in schedule.routines(p) if "cycle" in r["name"]] == ["06:30", "12:00", "18:00", "23:30"]
-    r = c.post("/schedule", data={"_token": t, "timezone": "Mars/Base", "notify_time": "07:00",
+    assert s["apply_gap_seconds"] == 180 and s["notify_timezone"] == "America/New_York"
+    routines = schedule.routines(p)
+    assert [r["time"] for r in routines if "cycle" in r["name"]] == ["06:30", "12:00", "18:00", "23:30"]
+    assert {r["timezone"] for r in routines if "cycle" in r["name"]} == {"Asia/Tokyo"}
+    assert next(r for r in routines if r["name"].endswith("digest"))["timezone"] == "America/New_York"
+    r = c.post("/schedule", data={"_token": t, "scan_timezone": "Mars/Base", "notify_time": "07:00",
                                   "scan_count": "1", "scan_1": "06:30", "apply_gap_minutes": "3"})
-    assert "time zone" in r.text and config.load_settings(p)["timezone"] == "America/New_York"
-    r = c.post("/schedule", data={"_token": t, "timezone": "America/New_York", "notify_time": "07:13",
+    assert "time zone" in r.text and config.load_settings(p)["scan_timezone"] == "Asia/Tokyo"
+    r = c.post("/schedule", data={"_token": t, "notify_time": "07:13",
                                   "scan_count": "1", "scan_1": "06:30"})
     assert "Pick" in r.text
