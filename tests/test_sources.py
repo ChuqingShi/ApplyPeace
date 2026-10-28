@@ -150,3 +150,12 @@ def test_workday_pages_worth_reading():
     assert wanted("Data Scientist", None) and wanted("Data Scientist", "US")
     assert not wanted("Data Scientist", "non-US") and not wanted("Senior Data Scientist", "US")
     assert not wanted("Data Scientist Intern", "US")
+
+
+def test_mid_level_keeps_iii_and_drops_senior():
+    from applypeace.rank.filters import too_senior
+
+    assert too_senior("Data Scientist III", "early") and not too_senior("Data Scientist III", "mid")
+    assert too_senior("Senior Data Scientist", "mid") and too_senior("Lead Applied Scientist", "mid")
+    assert not too_senior("Applied Scientist II", "mid") and not too_senior("Senior Data Scientist", "any")
+    assert not too_senior("Member of Technical Staff", "mid")

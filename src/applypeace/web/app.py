@@ -21,6 +21,7 @@ from ..approval import verify
 from ..companies import registry as reg
 from ..db import connect
 from ..rank import h1b_note
+from ..rank.filters import SENIORITY_LEVELS
 from ..resume_reader import read_resume
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -190,6 +191,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             counts[key] = (len(members), len(ready))
         draft = config.load_yaml(p.profile_draft, {})
         return render(request, "setup_targets.html", step="targets", lists=config.LISTS, counts=counts,
+                      seniority_levels=SENIORITY_LEVELS,
                       suggested=draft.get("suggested_titles", []))
 
     @app.post("/setup/targets")
@@ -200,7 +202,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings["targets"]["exclude_titles"] = _lines(form.get("exclude_titles", ""))
         settings["targets"]["locations"] = _lines(form.get("locations", ""))
         settings["targets"]["remote_ok"] = form.get("remote_ok") == "yes"
-        settings["targets"]["seniority"] = "early" if form.get("seniority") == "early" else "any"
+        settings["targets"]["seniority"] = form.get("seniority") if form.get("seniority") in SENIORITY_LEVELS else "any"
         try:
             settings["min_fit_score"] = max(1.0, min(5.0, float(form.get("min_fit_score", settings["min_fit_score"]))))
         except ValueError:

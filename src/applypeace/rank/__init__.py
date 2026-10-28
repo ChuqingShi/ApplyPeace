@@ -13,7 +13,7 @@ from .. import llm, profile
 from ..companies import registry as reg
 from ..config import Paths, load_settings
 from ..db import log_event
-from .filters import _age_days, apply_filters
+from .filters import SENIORITY_LEVELS, _age_days, apply_filters
 from .judge import judge_job
 from .keywords import tfidf_scores
 
@@ -107,7 +107,7 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print) -> RankResult:
             "needs_sponsorship_future": answers.get("needs_sponsorship_future"),
             "visa_status": answers.get("visa_status"),
             "target_titles": settings["targets"]["titles"],
-            "seniority_wanted": "early career only (no senior/staff/lead roles)" if settings["targets"].get("seniority") == "early" else "any level",
+            "seniority_wanted": SENIORITY_LEVELS.get(settings["targets"].get("seniority"), SENIORITY_LEVELS["any"])[1],
             "preferred_locations": settings["targets"]["locations"],
         }
         preferences = p.preferences.read_text() if p.preferences.exists() else ""

@@ -71,7 +71,27 @@ SENIOR_TITLE = re.compile(
     r"|fellow|architect|iii|iv|v)\b|\b(level|l)\s*[5-9]\b", re.I)
 # Titles that contain a "senior" word but aren't senior, e.g. the generic AI-lab title.
 NOT_SENIOR = re.compile(r"member of (the )?technical staff", re.I)
-SENIORITY_LEVELS = {"early": "Early career (no Senior, Staff, Lead, Principal or Manager titles)", "any": "Any level"}
+# Level setting -> (what the setup page says, what the AI judge is told).
+SENIORITY_LEVELS = {
+    "early": ("Early career: hide Senior, Staff, Lead, Principal, Manager titles",
+              "early career only (no senior/staff/lead roles)"),
+    "mid": ("Entry and mid-level: hide only Senior, Staff, Lead, Principal, Manager and above",
+            "entry to mid-level roles. Count the candidate's PhD as research experience: postings asking for a "
+            "PhD, or a Master's or PhD plus a few years, or up to about 3-4 years in total, are within reach. Only "
+            "senior, staff, principal, lead or manager roles (typically 5+ years or leading others) are a seniority "
+            "mismatch."),
+    "any": ("Any level", "any level"),
+}
+
+
+def too_senior(title: str, level: str) -> bool:
+    """True when the title is above the level you want ("III" counts as mid-level, not senior)."""
+    if level not in ("early", "mid"):
+        return False
+    text = NOT_SENIOR.sub(" ", title)
+    if level == "mid":
+        text = re.sub(r"\biii\b", " ", text, flags=re.I)
+    return bool(SENIOR_TITLE.search(text))
 
 
 def _age_days(posted_at: str | None, first_seen: str) -> float:
@@ -108,7 +128,7 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
         return "title not targeted"
     if targets["exclude_titles"] and title_matches(job["title"], targets["exclude_titles"], max_gap=0):
         return "excluded title word"
-    if targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(NOT_SENIOR.sub(" ", job["title"])):
+    if too_senior(job["title"], targets.get("seniority", "any")):
         return "above your level"
     if _age_days(job["posted_at"], job["first_seen"]) > settings["max_posting_age_days"]:
         return "posting too old"
@@ -130,7 +150,7 @@ def worth_reading(settings: dict):
             return False
         if targets["exclude_titles"] and title_matches(title, targets["exclude_titles"], max_gap=0):
             return False
-        return not (targets.get("seniority", "any") == "early" and SENIOR_TITLE.search(NOT_SENIOR.sub(" ", title)))
+        return not too_senior(title, targets.get("seniority", "any"))
 
     return check
 
