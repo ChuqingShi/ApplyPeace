@@ -145,21 +145,46 @@ def test_after_scan_mode_notifies_only_when_jobs_are_added(client, monkeypatch):
     assert sent == ["1 new job to review (1 in your batch)."]
 
 
-def test_activity_log_shows_scans_notifications_and_your_actions(client):
-    import json
-
+def test_activity_log_lists_scans_and_what_you_applied_to(client):
     from applypeace.db import connect, log_event, now
+    from applypeace.selfapplied import mark_applied
 
     c, p = client
     with connect(p.db) as conn:
-        for jid, status in (("x:a:1", "approved"), ("x:a:2", "queued")):
+        for jid, status in (("x:a:1", "queued"), ("x:a:2", "queued")):
             conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status)"
                          " VALUES (?,?,?,?,?,?,?,?,?,?)", (jid, "acme", "x", "a", jid[-1], f"Analyst {jid[-1]}", "u", now(), now(), status))
-        log_event(conn, "cycle", detail={"trigger": "scheduled", "boards": 5, "new": 12, "passed": 3, "judged": 3,
-                                         "queued": ["x:a:1", "x:a:2"], "notified": True, "message": "2 new jobs"})
-        log_event(conn, "cycle", detail={"trigger": "manual", "boards": 5, "new": 0, "passed": 0, "judged": 0, "queued": []})
+        log_event(conn, "cycle", detail={"trigger": "scheduled", "new": 12, "queued": ["x:a:1", "x:a:2"]})
+        log_event(conn, "cycle", detail={"trigger": "manual", "new": 0, "queued": []})
+        mark_applied(conn, "x:a:1")
+        log_event(conn, "apply_needs_you", "x:a:2", {"detail": "stuck"})
         conn.commit()
     html = c.get("/activity").text
-    assert "Scheduled scan" in html and "Manual scan" in html and "Notified you" in html
-    assert "No notification (nothing new)" in html and "You approved" in html and "Waiting for you" in html
-    assert "Analyst 2" in html
+    assert html.count("Scan ·") == 2 and "2 new for you" in html and "0 new for you" in html
+    assert "Analyst 1" in html and "(by you)" in html
+    assert "Analyst 2" not in html and "stuck" not in html  # not applied; no per-application cards
+
+
+def test_a_role_you_applied_to_never_comes_back(client):
+    from applypeace.db import connect, now
+    from applypeace.rank.filters import ALREADY_APPLIED, ALREADY_SEEN, apply_filters
+    from applypeace.selfapplied import mark_applied
+
+    _, p = client
+    settings = config.load_settings(p)
+    with connect(p.db) as conn:
+        rows = [("x:a:1", "Data Analyst", "queued"), ("x:a:2", "Data Analyst", "skipped"),  # same role, two postings
+                ("x:a:3", "data analyst ", "new"), ("x:a:4", "ML Engineer", "new"), ("x:a:5", "ML Engineer", "new"),
+                ("x:a:6", "Platform Engineer", "queued"), ("x:a:7", "Platform Engineer", "new")]
+        for jid, title, status in rows:
+            conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, country, url, first_seen, last_seen, status)"
+                         " VALUES (?,?,?,?,?,?,'US','u',?,?,?)", (jid, "acme", "x", "a", jid[-1], title, now(), now(), status))
+        mark_applied(conn, "x:a:1")
+        status = dict(conn.execute("SELECT id, status FROM jobs").fetchall())
+        assert status["x:a:2"] == "filtered"  # gone from "Kept for later" right away
+        apply_filters(conn, settings, {"acme"}, {})
+        jobs = {r["id"]: (r["status"], r["status_reason"]) for r in conn.execute("SELECT * FROM jobs")}
+    assert jobs["x:a:1"] == ("submitted", "applied by you")
+    assert jobs["x:a:3"] == ("filtered", ALREADY_APPLIED)
+    assert jobs["x:a:4"][0] == "candidate" and jobs["x:a:5"] == ("filtered", ALREADY_SEEN)
+    assert jobs["x:a:6"][0] == "queued" and jobs["x:a:7"] == ("filtered", ALREADY_SEEN)

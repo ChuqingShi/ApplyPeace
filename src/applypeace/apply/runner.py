@@ -15,6 +15,7 @@ from ..browser import launch
 from ..config import Paths, load_settings
 from ..db import log_event, now
 from ..notify import notify
+from ..rank.filters import retire_duplicates
 from . import ashby, greenhouse, lever
 from .base import NeedsCode, NeedsYou
 
@@ -46,6 +47,8 @@ def _record(conn, job_id, status, detail="", before=None, after=None, values=Non
         (job_id, status, started or now(), now(), detail, before, after, json.dumps(values) if values else None),
     )
     conn.execute("UPDATE jobs SET status=? WHERE id=?", (status, job_id))
+    if status == "submitted":
+        retire_duplicates(conn, job_id)
     log_event(conn, f"apply_{status}", job_id, {"detail": detail})
     conn.commit()
 

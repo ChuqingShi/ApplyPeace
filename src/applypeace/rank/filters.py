@@ -19,6 +19,16 @@ NO_SPONSOR = re.compile(
 REVIEWABLE = ("new", "filtered", "candidate")
 # Jobs already in your batch are re-checked too, so a settings change also cleans the batch.
 RECHECK = REVIEWABLE + ("queued",)
+# Jobs you've already seen as a card (or applied to). A repost of the same role never comes back.
+SHOWN = ("queued", "approved", "applying", "submitted", "filled", "needs_you", "needs_code", "skipped",
+         "rejected", "gave_up")
+ALREADY_APPLIED = "already applied"
+ALREADY_SEEN = "same role as a job you've seen"
+
+
+def role_key(company_key: str, title: str) -> tuple[str, str]:
+    """One role at one company, whatever the posting id or location: ('acme', 'data analyst')."""
+    return company_key, " ".join(re.findall(r"[a-z0-9+#]+", (title or "").lower()))
 
 
 def _words(text: str) -> set[str]:
@@ -111,11 +121,28 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
 
 
 def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[str], h1b_by_company: dict) -> dict:
-    """Set every reviewable job to 'candidate' or 'filtered'. Returns counts by reason."""
+    """Set every reviewable job to 'candidate' or 'filtered'. Returns counts by reason.
+
+    Only one posting per role gets through: a role you applied to, or already saw
+    as a card, is filtered before the AI ever looks at it.
+    """
     counts: dict[str, int] = {}
-    rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(RECHECK))})", RECHECK).fetchall()
+    applied, seen = set(), set()
+    settled = [s for s in SHOWN if s not in RECHECK]  # batch jobs claim their role in the loop below
+    for r in conn.execute(f"SELECT company_key, title, status FROM jobs WHERE status IN ({','.join('?' * len(settled))})", settled):
+        (applied if r["status"] == "submitted" else seen).add(role_key(r["company_key"], r["title"]))
+    # Batch jobs first, then the oldest posting, so the copy you already have is the one kept.
+    rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(RECHECK))})"
+                        " ORDER BY status != 'queued', first_seen, id", RECHECK).fetchall()
     for job in rows:
         reason = decide(job, settings, enabled_keys, h1b_by_company.get(job["company_key"]))
+        role = role_key(job["company_key"], job["title"])
+        if not reason and role in applied:
+            reason = ALREADY_APPLIED
+        elif not reason and role in seen:
+            reason = ALREADY_SEEN
+        if not reason:
+            seen.add(role)
         if job["status"] == "queued" and not reason:
             continue  # still fine: stays in the batch
         status = "filtered" if reason else "candidate"
@@ -124,3 +151,20 @@ def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[st
             conn.execute("UPDATE jobs SET status=?, status_reason=? WHERE id=?", (status, reason, job["id"]))
     conn.commit()
     return counts
+
+
+def retire_duplicates(conn: sqlite3.Connection, job_id: str) -> int:
+    """After you apply to a job, drop every other posting of the same role from all card lists."""
+    job = conn.execute("SELECT company_key, title FROM jobs WHERE id=?", (job_id,)).fetchone()
+    if not job:
+        return 0
+    role = role_key(job["company_key"], job["title"])
+    gone = 0
+    for r in conn.execute("SELECT id, title FROM jobs WHERE company_key=? AND id != ?"
+                          " AND status IN ('new','filtered','candidate','queued','skipped')",
+                          (job["company_key"], job_id)).fetchall():
+        if role_key(job["company_key"], r["title"]) == role:
+            conn.execute("UPDATE jobs SET status='filtered', status_reason=? WHERE id=?", (ALREADY_APPLIED, r["id"]))
+            conn.execute("DELETE FROM approvals WHERE job_id=?", (r["id"],))
+            gone += 1
+    return gone

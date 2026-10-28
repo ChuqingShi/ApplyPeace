@@ -12,6 +12,7 @@ from .companies import registry as reg
 from .companies.names import key_for, same_company
 from .config import Paths
 from .db import log_event, now
+from .rank.filters import retire_duplicates
 
 _PATTERNS = [
     ("greenhouse", re.compile(r"(?:job-boards|boards)\.greenhouse\.io/([^/?#]+)/jobs/(\d+)")),
@@ -51,6 +52,7 @@ def mark_applied(conn: sqlite3.Connection, job_id: str, applied_on: str | None =
     if resume_key:
         conn.execute("UPDATE jobs SET resume_key=? WHERE id=?", (resume_key, job_id))
     conn.execute("UPDATE jobs SET status='submitted', status_reason='applied by you' WHERE id=?", (job_id,))
+    retire_duplicates(conn, job_id)
     log_event(conn, "applied_by_you", job_id, {"on": when})
     conn.commit()
 
