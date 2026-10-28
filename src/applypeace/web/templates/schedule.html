@@ -7,6 +7,7 @@
   .sched .scan-row label { margin: 0; min-width: 4.5rem; font-weight: 400; }
   .sched .scan-row[hidden], .tz-actions [hidden] { display: none; }
   .tz-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  #daily-row[hidden] { display: none; }
   .tz-actions button { flex: 0 1 auto; padding: 8px 12px; }
 </style>
 <p><a href="/">← Back</a></p>
@@ -21,8 +22,12 @@ Your device is set to <strong id="tz-device"></strong>.
 <form method="post" action="/schedule" id="schedule-form" class="sched">
 <input type="hidden" name="_token" value="{{ token }}">
 
-<h2>Batch notification</h2>
-<div class="pair">
+<h2>Notifications</h2>
+<label class="choice"><input type="radio" name="notify_mode" value="after_scan" {{ 'checked' if settings.notify_mode != 'daily' }}>
+<span>Right after each scan <span class="hint">as soon as a scan adds jobs to your batch; nothing if it finds none</span></span></label>
+<label class="choice"><input type="radio" name="notify_mode" value="daily" {{ 'checked' if settings.notify_mode == 'daily' }}>
+<span>Once a day <span class="hint">one quiet summary at a time you pick</span></span></label>
+<div class="pair" id="daily-row">
 <select name="notify_time" aria-label="Notification time">
 {% for value, label in slots %}<option value="{{ value }}" {{ 'selected' if value == settings.notify_time }}>{{ label }}</option>{% endfor %}
 </select>
@@ -30,6 +35,7 @@ Your device is set to <strong id="tz-device"></strong>.
 {% for value, label in notify_zones %}<option value="{{ value }}" {{ 'selected' if value == notify_tz }}>{{ label }}</option>{% endfor %}
 </select>
 </div>
+<p class="muted small">You're always told right away when an application needs you (a CAPTCHA or an emailed code).</p>
 
 <h2>Scans</h2>
 <div class="pair">
@@ -76,6 +82,10 @@ Your device is set to <strong id="tz-device"></strong>.
     });
   };
   rows.forEach(function (row) { if (row.hidden) row.querySelector("select").disabled = true; });
+  var daily = document.getElementById("daily-row");
+  function syncMode() { daily.hidden = !document.querySelector('input[name=notify_mode][value=daily]').checked; }
+  document.querySelectorAll("input[name=notify_mode]").forEach(function (r) { r.onchange = syncMode; });
+  syncMode();
 
   var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
   var current = { "notify-tz": {{ notify_tz | tojson }}, "scan-tz": {{ scan_tz | tojson }} };
@@ -83,7 +93,8 @@ Your device is set to <strong id="tz-device"></strong>.
   var any = false;
   ["notify-tz", "scan-tz"].forEach(function (id) {
     var btn = document.querySelector('[data-target="' + id + '"]');
-    if (current[id] === device) { btn.hidden = true; return; }
+    var dailyOnly = id === "notify-tz" && {{ (settings.notify_mode != 'daily') | tojson }};
+    if (current[id] === device || dailyOnly) { btn.hidden = true; return; }
     any = true;
     btn.onclick = function () {
       var sel = document.getElementById(id);

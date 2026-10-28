@@ -109,7 +109,7 @@ def test_schedule_page_saves_custom_times(client):
     assert 'name="scan_count"' in html and "7:30 AM" in html and 'id="tz-banner"' in html
     t = token(html)
     c.post("/schedule", data={"_token": t, "notify_timezone": "America/New_York", "notify_time": "07:00",
-                              "scan_timezone": "Asia/Tokyo", "scan_count": "4", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",
+                              "scan_timezone": "Asia/Tokyo", "scan_count": "4", "notify_mode": "daily", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",
                               "scan_4": "23:30", "apply_gap_minutes": "3"})
     s = config.load_settings(p)
     assert s["notify_time"] == "07:00" and s["scan_times"] == ["06:30", "12:00", "18:00", "23:30"]
@@ -124,3 +124,22 @@ def test_schedule_page_saves_custom_times(client):
     r = c.post("/schedule", data={"_token": t, "notify_time": "07:13",
                                   "scan_count": "1", "scan_1": "06:30"})
     assert "Pick" in r.text
+
+
+def test_after_scan_mode_notifies_only_when_jobs_are_added(client, monkeypatch):
+    from applypeace import pipeline, schedule
+
+    c, p = client
+    s = config.load_settings(p)
+    assert s["notify_mode"] == "after_scan"
+    assert not any(r["name"].endswith("digest") for r in schedule.routines(p))  # no separate daily alert
+    sent = []
+    monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg))
+    monkeypatch.setattr(pipeline, "require_setup", lambda p: None)
+    from applypeace.db import connect, now
+    with connect(p.db) as conn:
+        conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status)"
+                     " VALUES ('x:a:1','a','x','a','1','Analyst','u',?,?,'queued')", (now(), now()))
+        conn.commit()
+    pipeline.digest(p, force=True, new_jobs=1)
+    assert sent == ["1 new job to review (1 in your batch)."]

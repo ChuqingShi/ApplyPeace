@@ -421,6 +421,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
                 except (ZoneInfoNotFoundError, ValueError):
                     raise ValueError(f"'{tz}' isn't a time zone name like America/New_York")
                 zones[key] = tz
+            settings["notify_mode"] = "daily" if form.get("notify_mode") == "daily" else "after_scan"
             settings.update(notify_time=notify, scan_times=times, timezone=zones["notify_timezone"], **zones,
                             apply_gap_seconds=max(60, int(form.get("apply_gap_minutes", 2)) * 60))
         except ValueError as exc:

@@ -95,9 +95,9 @@ def routines(p: Paths, port: int = 8765) -> list[dict]:
          "timezone": scan_tz, "timeout": 3600}
         for i, t in enumerate(times, 1)
     ]
-    return scans + [
-        {"name": PREFIX + "digest", "command": _ap("digest", p), "type": "daily", "time": settings["notify_time"],
-         "timezone": notify_tz, "timeout": 300},
+    daily = [{"name": PREFIX + "digest", "command": _ap("digest", p), "type": "daily", "time": settings["notify_time"],
+              "timezone": notify_tz, "timeout": 300}] if settings.get("notify_mode") == "daily" else []
+    return scans + daily + [
         {"name": PREFIX + "apply", "command": _ap("apply --max 1", p), "type": "interval", "interval": 600,
          "timeout": 1800},  # one application per tick keeps them spaced; 30 min covers a code wait
         {"name": PREFIX + "web", "command": _ap(f"serve --background --port {port}", p), "type": "interval",

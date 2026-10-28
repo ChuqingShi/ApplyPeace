@@ -56,11 +56,17 @@ def cycle(p: Paths, log=print) -> dict:
     from .backup import backup
 
     log(backup(p, "After scan"))
+    if load_settings(p).get("notify_mode", "after_scan") == "after_scan" and queued:
+        log(digest(p, force=True, new_jobs=len(queued)) or "")
     return {"new": found.new, "queued": len(queued), **prepared}
 
 
-def digest(p: Paths, force: bool = False) -> str | None:
-    """Send the once-a-day "batch ready" notification, if there's anything to review."""
+def digest(p: Paths, force: bool = False, new_jobs: int = 0) -> str | None:
+    """Send the "batch ready" notification, if there's anything to review.
+
+    Called right after a scan that added jobs (notify_mode "after_scan"), or once
+    a day at the chosen time (notify_mode "daily").
+    """
     require_setup(p)
     settings = load_settings(p)
     if not force and settings.get("last_digest") == date.today().isoformat():
@@ -73,7 +79,10 @@ def digest(p: Paths, force: bool = False) -> str | None:
         stuck = conn.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('needs_you','needs_code')").fetchone()[0]
     if not queued and not stuck:
         return None
-    parts = [f"Batch ready: {len(queued)} job{'s' if len(queued) != 1 else ''}"]
+    if new_jobs:
+        parts = [f"{new_jobs} new job{'s' if new_jobs != 1 else ''} to review ({len(queued)} in your batch)"]
+    else:
+        parts = [f"Batch ready: {len(queued)} job{'s' if len(queued) != 1 else ''}"]
     if needs_input:
         parts.append(f"{needs_input} need your input")
     if stuck:

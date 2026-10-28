@@ -148,6 +148,7 @@ DEFAULT_SETTINGS: dict = {
     "batch_size": 10,
     "daily_cap": 15,
     "notify_time": "08:00",
+    "notify_mode": "after_scan",  # after_scan: tell me as soon as a scan finds jobs | daily: one summary at notify_time
     "timezone": "America/Los_Angeles",
     "scan_interval_hours": 8,
     "scan_times": [],  # custom daily scan times ("HH:MM"); empty = derived from notify_time + interval
