@@ -60,8 +60,11 @@ def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
 
     log(backup(p, "After scan"))
     sent: dict = {}
-    if load_settings(p).get("notify_mode", "after_scan") == "after_scan" and queued:
+    if queued and (trigger == "manual" or load_settings(p).get("notify_mode", "after_scan") == "after_scan"):
         log(digest(p, force=True, new_jobs=len(queued), result=sent) or "")
+    elif trigger == "manual":  # you asked for this scan, so always say how it went
+        message = "Scan done: no new jobs for you this time."
+        sent = {"sent": bool(notify(message, open_url=load_settings(p).get("review_url") or None)), "message": message}
     detail = {
         "trigger": trigger, "started": started, "boards": found.boards, "seen": found.seen, "new": found.new,
         "closed": found.closed, "passed": ranked.candidates, "judged": ranked.judged, "queued": queued,

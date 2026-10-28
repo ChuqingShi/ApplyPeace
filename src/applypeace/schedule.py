@@ -182,6 +182,25 @@ def serve_background(p: Paths, port: int) -> str:
     return f"Started the phone page on 127.0.0.1:{port}."
 
 
+def scanning(p: Paths) -> bool:
+    """True while a scan (scheduled or "Scan now") is running."""
+    from .pipeline import single_run
+
+    with single_run(p, "cycle") as free:
+        return not free
+
+
+def scan_now(p: Paths) -> bool:
+    """Start a scan in the background right away. False if one is already running."""
+    if scanning(p):
+        return False
+    exe = shutil.which("ap") or sys.argv[0]
+    log = (p.home / "ap.log").open("a")
+    subprocess.Popen([exe, "cycle", "--manual"], stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                     start_new_session=True, env={**os.environ, "APPLYPEACE_HOME": str(p.home)})
+    return True
+
+
 def ensure_published(name: str = "applypeace") -> str:
     """Bring the phone page's gateway back if Openbase left it stopped (e.g. after a workspace restart)."""
     listing = subprocess.run(["openbase-coder", "service", "list"], capture_output=True, text=True).stdout

@@ -79,7 +79,9 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         if missing:
             return go("/setup")
         with connect(p.db) as conn:
-            return render(request, "home.html", msg=msg, **home_context(p, conn))
+            from .. import schedule
+
+            return render(request, "home.html", msg=msg, scanning=schedule.scanning(p), **home_context(p, conn))
 
     # ------------------------------------------------------------ setup: choices
 
@@ -384,6 +386,15 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         settings["paused"] = not settings.get("paused")
         config.save_settings(settings, p)
         return go("/?msg=" + ("Paused" if settings["paused"] else "Resumed"))
+
+    @app.post("/scan-now")
+    async def scan_now(request: Request):
+        from .. import schedule
+
+        await check(request)
+        started = schedule.scan_now(p)
+        return go("/?msg=" + ("Scanning now. You'll get a notification when it's done, usually within a few minutes."
+                              if started else "A scan is already running. You'll get a notification when it's done."))
 
     @app.get("/schedule", response_class=HTMLResponse)
     def schedule_page(request: Request, msg: str = ""):

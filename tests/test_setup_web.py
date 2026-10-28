@@ -188,3 +188,34 @@ def test_a_role_you_applied_to_never_comes_back(client):
     assert jobs["x:a:3"] == ("filtered", ALREADY_APPLIED)
     assert jobs["x:a:4"][0] == "candidate" and jobs["x:a:5"] == ("filtered", ALREADY_SEEN)
     assert jobs["x:a:6"][0] == "queued" and jobs["x:a:7"] == ("filtered", ALREADY_SEEN)
+
+
+def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
+    from applypeace import pipeline, schedule
+    from applypeace.discover import DiscoverResult
+    from applypeace.rank import RankResult
+
+    c, p = client
+    started = []
+    monkeypatch.setattr(pipeline, "require_setup", lambda p: None)
+    c.get("/setup")  # creates the data folder
+    t = token(c.get("/schedule").text)
+    with monkeypatch.context() as m:
+        m.setattr(schedule.subprocess, "Popen", lambda cmd, **k: started.append(cmd))
+        r = c.post("/scan-now", data={"_token": t}, follow_redirects=False)
+    assert "Scanning%20now" in r.headers["location"] and started and started[0][1:] == ["cycle", "--manual"]
+
+    with pipeline.single_run(p, "cycle"):  # a scan is running: no second one
+        assert schedule.scanning(p) and not schedule.scan_now(p)
+
+    sent = []
+    monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg) or True)
+    monkeypatch.setattr(pipeline, "discover", lambda conn, companies: DiscoverResult())
+    monkeypatch.setattr(pipeline, "rank", lambda p, conn, log: RankResult())
+    monkeypatch.setattr(pipeline, "select_batch", lambda p, conn: [])
+    monkeypatch.setattr(pipeline, "prepare_queue", lambda p, conn, log: {"prepared": 0})
+    pipeline.cycle(p, log=lambda *a: None, trigger="manual")
+    assert sent == ["Scan done: no new jobs for you this time."]
+    sent.clear()
+    pipeline.cycle(p, log=lambda *a: None, trigger="scheduled")
+    assert sent == []  # scheduled scans stay quiet when nothing is new
