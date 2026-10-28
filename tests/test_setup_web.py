@@ -202,8 +202,9 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
     t = token(c.get("/schedule").text)
     with monkeypatch.context() as m:
         m.setattr(schedule.subprocess, "Popen", lambda cmd, **k: started.append(cmd))
+        m.setattr(schedule.time, "sleep", lambda s: None)
         r = c.post("/scan-now", data={"_token": t}, follow_redirects=False)
-    assert "Scanning%20now" in r.headers["location"] and started and started[0][1:] == ["cycle", "--manual"]
+    assert r.headers["location"] == "/" and started and started[0][1:] == ["cycle", "--manual"]
 
     with pipeline.single_run(p, "cycle"):  # a scan is running: no second one
         assert schedule.scanning(p) and not schedule.scan_now(p)
@@ -219,6 +220,9 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
     sent.clear()
     pipeline.cycle(p, log=lambda *a: None, trigger="scheduled")
     assert sent == []  # scheduled scans stay quiet when nothing is new
+    from applypeace.db import connect
+    with connect(p.db) as conn:
+        assert schedule.last_scan(conn, "America/Los_Angeles")["added"] == 0
 
 
 def test_next_scan_time():

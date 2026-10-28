@@ -81,8 +81,10 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         with connect(p.db) as conn:
             from .. import schedule
 
+            settings = config.load_settings(p)
             return render(request, "home.html", msg=msg, scanning=schedule.scanning(p),
-                          next_scan=schedule.next_scan(config.load_settings(p)), **home_context(p, conn))
+                          next_scan=schedule.next_scan(settings),
+                          last_scan=schedule.last_scan(conn, schedule.zones_of(settings)[1]), **home_context(p, conn))
 
     # ------------------------------------------------------------ setup: choices
 
@@ -393,9 +395,8 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         from .. import schedule
 
         await check(request)
-        started = schedule.scan_now(p)
-        return go("/?msg=" + ("Scanning now. You'll get a notification when it's done, usually within a few minutes."
-                              if started else "A scan is already running. You'll get a notification when it's done."))
+        schedule.scan_now(p)
+        return go("/")  # the home page shows "Scanning…" and refreshes itself until the scan is done
 
     @app.get("/schedule", response_class=HTMLResponse)
     def schedule_page(request: Request, msg: str = ""):

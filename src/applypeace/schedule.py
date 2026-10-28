@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -215,7 +216,25 @@ def scan_now(p: Paths) -> bool:
     log = (p.home / "ap.log").open("a")
     subprocess.Popen([exe, "cycle", "--manual"], stdout=log, stderr=log, stdin=subprocess.DEVNULL,
                      start_new_session=True, env={**os.environ, "APPLYPEACE_HOME": str(p.home)})
+    for _ in range(20):  # wait until the scan holds its lock, so the page shows "Scanning…" straight away
+        if scanning(p):
+            break
+        time.sleep(0.25)
     return True
+
+
+def last_scan(conn, tz: str) -> dict | None:
+    """When the latest scan finished and how many jobs it added."""
+    import json
+
+    row = conn.execute("SELECT at, detail FROM events WHERE kind='cycle' ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        return None
+    detail = json.loads(row["detail"] or "{}")
+    queued = detail.get("queued")
+    when = datetime.fromisoformat(row["at"]).astimezone(ZoneInfo(tz))
+    day = "today" if when.date() == datetime.now(ZoneInfo(tz)).date() else when.strftime("%a %b %-d")
+    return {"at": f"{day} at {when.strftime('%-I:%M %p')}", "added": len(queued) if isinstance(queued, list) else queued or 0}
 
 
 def ensure_published(name: str = "applypeace") -> str:
