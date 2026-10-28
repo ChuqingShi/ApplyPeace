@@ -403,13 +403,22 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
             n = review.approve_ready(p, conn)
         return go(f"/?msg=Approved {n} jobs")
 
+    @app.post("/pause-scans")
+    async def pause_scans(request: Request):
+        await check(request)
+        settings = config.load_settings(p)
+        settings["scans_paused"] = not settings.get("scans_paused")
+        config.save_settings(settings, p)
+        return go("/?msg=" + ("Scheduled scans paused. Scan now still works." if settings["scans_paused"]
+                              else "Scheduled scans are back on."))
+
     @app.post("/pause")
     async def pause(request: Request):
         await check(request)
         settings = config.load_settings(p)
         settings["paused"] = not settings.get("paused")
         config.save_settings(settings, p)
-        return go("/?msg=" + ("Paused" if settings["paused"] else "Resumed"))
+        return go("/?msg=" + ("Sending is on hold." if settings["paused"] else "Sending approved applications again."))
 
     @app.post("/scan-now")
     async def scan_now(request: Request):

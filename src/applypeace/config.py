@@ -155,7 +155,8 @@ DEFAULT_SETTINGS: dict = {
     "max_posting_age_days": 30,
     "llm": {"consent": False, "judge_daily_limit": 30},
     "submit_mode": "fill_only",  # fill_only (dry run, nothing sent) | auto
-    "paused": False,
+    "paused": False,  # hold approved applications instead of submitting them
+    "scans_paused": False,  # skip scheduled scans (Scan now still works)
     "apply_gap_seconds": 150,
     "targets": {"titles": [], "exclude_titles": [], "locations": [], "remote_ok": True, "seniority": "any"},
     "min_fit_score": 3,  # AI fit score (1-5) a job needs to enter your batch

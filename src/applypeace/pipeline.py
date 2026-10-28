@@ -65,6 +65,9 @@ def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
     which jobs were added, and whether you were notified.
     """
     require_setup(p)
+    if trigger != "manual" and load_settings(p).get("scans_paused"):
+        log("Scheduled scans are paused; skipping.")
+        return {"skipped": True}
     try:
         return _cycle(p, log, trigger)
     finally:

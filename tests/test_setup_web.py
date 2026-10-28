@@ -314,3 +314,18 @@ def test_ai_title_suggestions_show_as_chips(client, monkeypatch):
     s["targets"]["titles"].append("Statistician")
     config.save_settings(s, p)
     assert [t["title"] for t in titles.saved(p)] == ["Analytics Engineer"]  # added titles drop out of the list
+
+
+def test_pause_scans_skips_scheduled_scans_but_not_scan_now(client, monkeypatch):
+    from applypeace import pipeline
+
+    c, p = client
+    monkeypatch.setattr(pipeline, "require_setup", lambda p: None)
+    c.get("/setup")
+    c.post("/pause-scans", data={"_token": token(c.get("/schedule").text)})
+    assert config.load_settings(p)["scans_paused"] is True
+    assert pipeline.cycle(p, log=lambda *a: None, trigger="scheduled") == {"skipped": True}
+    ran = []
+    monkeypatch.setattr(pipeline, "_cycle", lambda p, log, trigger: ran.append(trigger) or {})
+    pipeline.cycle(p, log=lambda *a: None, trigger="manual")
+    assert ran == ["manual"]
