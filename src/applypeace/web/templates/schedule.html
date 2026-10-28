@@ -3,38 +3,73 @@
 <p><a href="/">← Back</a></p>
 <h1>Schedule</h1>
 {% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
-<p class="muted">Changes take effect as soon as you save. Times are in {{ settings.timezone }}.</p>
 <div class="card warn" id="tz-banner" hidden>
 Your device is set to <strong id="tz-device"></strong>, but ApplyPeace uses {{ settings.timezone }}.
 <button type="button" id="tz-use" style="margin-top:8px">Use my time zone</button></div>
 <form method="post" action="/schedule" id="schedule-form">
 <input type="hidden" name="_token" value="{{ token }}">
+
+<label>Time zone</label>
+<select name="timezone" id="tz-input">
+{% for value, label in zones %}<option value="{{ value }}" {{ 'selected' if value == settings.timezone }}>{{ label }}</option>{% endfor %}
+</select>
+
 <label>Daily batch notification</label>
-<input type="text" name="notify_time" value="{{ settings.notify_time }}" placeholder="7:00 or 7am">
+<select name="notify_time">
+{% for value, label in slots %}<option value="{{ value }}" {{ 'selected' if value == settings.notify_time }}>{{ label }}</option>{% endfor %}
+</select>
 
 <h2>Scans</h2>
-<label class="choice"><input type="radio" name="mode" value="custom" {{ 'checked' if custom }}>
-<span>At these times <span class="hint">comma separated, e.g. 6:30, 12pm, 22:30</span></span></label>
-<input type="text" name="scan_times" value="{{ scan_text }}">
-<label class="choice"><input type="radio" name="mode" value="every" {{ 'checked' if not custom }}>
-<span>Every <input type="number" name="interval" min="1" max="24" value="{{ settings.scan_interval_hours }}" style="width:70px;display:inline"> hours, first one 30 min before the notification</span></label>
+<label>Scans per day</label>
+<select name="scan_count" id="scan-count">
+{% for n in range(1, max_scans + 1) %}<option value="{{ n }}" {{ 'selected' if n == scan_list|length }}>{{ n }}</option>{% endfor %}
+</select>
+<p class="muted small">Tip: one scan about 30 minutes before your notification keeps the morning batch fresh.</p>
+{% for i in range(1, max_scans + 1) %}
+<div class="scan-row" data-i="{{ i }}" {{ 'hidden' if i > scan_list|length }}>
+<label>Scan {{ i }}</label>
+<select name="scan_{{ i }}">
+{% set current = scan_list[i - 1] if i <= scan_list|length else '' %}
+{% for value, label in slots %}<option value="{{ value }}" {{ 'selected' if value == current }}>{{ label }}</option>{% endfor %}
+</select></div>
+{% endfor %}
 
 <h2>Sending</h2>
-<label>Minutes between applications</label>
-<input type="number" name="apply_gap_minutes" min="1" step="0.5" value="{{ (settings.apply_gap_seconds / 60) | round(1) }}">
-<label>Time zone <span class="hint">e.g. America/Los_Angeles</span></label>
-<input type="text" name="timezone" id="tz-input" value="{{ settings.timezone }}">
+<label>Time between applications</label>
+<select name="apply_gap_minutes">
+{% set gap = (settings.apply_gap_seconds // 60) or 1 %}
+{% for g in gaps %}<option value="{{ g }}" {{ 'selected' if g == gap or (loop.first and gap < g) }}>{{ g }} minute{{ 's' if g != 1 }}</option>{% endfor %}
+</select>
 <div class="bar"><div class="inner"><button type="submit">Save schedule</button></div></div>
 </form>
 <script>
 (function () {
+  var count = document.getElementById("scan-count");
+  var rows = document.querySelectorAll(".scan-row");
+  count.onchange = function () {
+    var n = parseInt(count.value, 10);
+    rows.forEach(function (row) {
+      var i = parseInt(row.dataset.i, 10);
+      var sel = row.querySelector("select");
+      if (i <= n && row.hidden) {  // a newly added scan: suggest a time spread across the day
+        var minutes = Math.round((6.5 * 60 + (i - 1) * 1440 / n) / 30) * 30 % 1440;
+        sel.value = String(Math.floor(minutes / 60)).padStart(2, "0") + ":" + String(minutes % 60).padStart(2, "0");
+      }
+      row.hidden = i > n;
+      sel.disabled = i > n;
+    });
+  };
+  rows.forEach(function (row) { if (row.hidden) row.querySelector("select").disabled = true; });
+
   var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
   var saved = {{ settings.timezone | tojson }};
   if (!device || device === saved) return;
   document.getElementById("tz-device").textContent = device;
   document.getElementById("tz-banner").hidden = false;
   document.getElementById("tz-use").onclick = function () {
-    document.getElementById("tz-input").value = device;
+    var sel = document.getElementById("tz-input");
+    if (!Array.from(sel.options).some(function (o) { return o.value === device; })) sel.add(new Option(device, device));
+    sel.value = device;
     document.getElementById("schedule-form").submit();
   };
 })();

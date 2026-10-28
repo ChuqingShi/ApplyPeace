@@ -22,6 +22,32 @@ def _ap(args: str, p: Paths) -> str:
     return f"cd {shlex.quote(str(PROJECT_DIR))} && {env} uv run ap {args} >> {shlex.quote(str(p.home / 'ap.log'))} 2>&1"
 
 
+MAX_SCANS = 8
+
+
+def _label(minutes: int) -> str:
+    h, m = divmod(minutes, 60)
+    return f"{(h % 12) or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+
+
+# Every half hour of the day, as (value "HH:MM", label "7:30 AM").
+TIME_SLOTS = [(f"{t // 60:02d}:{t % 60:02d}", _label(t)) for t in range(0, 1440, 30)]
+
+COMMON_ZONES = [
+    ("America/Los_Angeles", "Pacific (Los Angeles)"), ("America/Denver", "Mountain (Denver)"),
+    ("America/Phoenix", "Arizona (Phoenix)"), ("America/Chicago", "Central (Chicago)"),
+    ("America/New_York", "Eastern (New York)"), ("America/Anchorage", "Alaska"), ("Pacific/Honolulu", "Hawaii"),
+    ("America/Toronto", "Toronto"), ("America/Vancouver", "Vancouver"), ("Europe/London", "London"),
+    ("Europe/Berlin", "Berlin / Paris"), ("Asia/Kolkata", "India"), ("Asia/Shanghai", "China"),
+    ("Asia/Singapore", "Singapore"), ("Asia/Tokyo", "Tokyo"), ("Australia/Sydney", "Sydney"),
+]
+
+
+def common_zones(current: str) -> list[tuple[str, str]]:
+    """Common zones, plus the current one if it isn't in the list."""
+    return COMMON_ZONES if any(z == current for z, _ in COMMON_ZONES) else [(current, current)] + COMMON_ZONES
+
+
 SCAN_LEAD_MINUTES = 30  # scan this long before the notification, so the batch is fresh
 
 

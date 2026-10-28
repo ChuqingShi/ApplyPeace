@@ -105,16 +105,19 @@ def test_schedule_page_saves_custom_times(client):
     from applypeace import schedule
 
     c, p = client
-    assert schedule.parse_times("6:30, 12pm 22:30") == ["06:30", "12:00", "22:30"]
-    t = token(c.get("/schedule").text)
-    r = c.post("/schedule", data={"_token": t, "notify_time": "7am", "mode": "custom",
-                                  "scan_times": "6:30, 1pm", "apply_gap_minutes": "3", "timezone": "America/New_York"})
+    html = c.get("/schedule").text
+    assert 'name="scan_count"' in html and "7:30 AM" in html and 'id="tz-banner"' in html
+    t = token(html)
+    c.post("/schedule", data={"_token": t, "timezone": "America/New_York", "notify_time": "07:00",
+                              "scan_count": "4", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",
+                              "scan_4": "23:30", "apply_gap_minutes": "3"})
     s = config.load_settings(p)
-    assert s["notify_time"] == "07:00" and s["scan_times"] == ["06:30", "13:00"] and s["apply_gap_seconds"] == 180
-    assert [r["time"] for r in schedule.routines(p) if "cycle" in r["name"]] == ["06:30", "13:00"]
-    r = c.post("/schedule", data={"_token": t, "notify_time": "25:00", "mode": "custom", "scan_times": "6:30"})
-    assert "valid" in r.text and config.load_settings(p)["notify_time"] == "07:00"
-    r = c.post("/schedule", data={"_token": t, "notify_time": "7am", "mode": "custom", "scan_times": "6:30",
-                                  "timezone": "Mars/Base"})
+    assert s["notify_time"] == "07:00" and s["scan_times"] == ["06:30", "12:00", "18:00", "23:30"]
+    assert s["apply_gap_seconds"] == 180 and s["timezone"] == "America/New_York"
+    assert [r["time"] for r in schedule.routines(p) if "cycle" in r["name"]] == ["06:30", "12:00", "18:00", "23:30"]
+    r = c.post("/schedule", data={"_token": t, "timezone": "Mars/Base", "notify_time": "07:00",
+                                  "scan_count": "1", "scan_1": "06:30", "apply_gap_minutes": "3"})
     assert "time zone" in r.text and config.load_settings(p)["timezone"] == "America/New_York"
-    assert 'id="tz-banner"' in c.get("/schedule").text
+    r = c.post("/schedule", data={"_token": t, "timezone": "America/New_York", "notify_time": "07:13",
+                                  "scan_count": "1", "scan_1": "06:30"})
+    assert "Pick" in r.text

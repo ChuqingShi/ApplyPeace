@@ -391,43 +391,39 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
 
         settings = config.load_settings(p)
         times = settings.get("scan_times") or schedule.scan_times(settings["notify_time"], settings["scan_interval_hours"])
-        return render(request, "schedule.html", msg=msg, scan_text=", ".join(times),
-                      custom=bool(settings.get("scan_times")))
+        return render(request, "schedule.html", msg=msg, scan_list=times, slots=schedule.TIME_SLOTS,
+                      max_scans=schedule.MAX_SCANS, zones=schedule.common_zones(settings["timezone"]),
+                      gaps=[1, 2, 3, 5, 10, 15, 30, 60])
 
     @app.post("/schedule")
     async def schedule_save(request: Request):
         form = await check(request)
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
         from .. import schedule
 
         settings = config.load_settings(p)
         try:
-            notify = schedule.parse_times(form.get("notify_time", ""))
-            if len(notify) != 1:
-                raise ValueError("Give exactly one notification time")
-            settings["notify_time"] = notify[0]
-            if form.get("mode") == "every":
-                settings["scan_times"] = []
-                settings["scan_interval_hours"] = max(1, min(24, int(form.get("interval", 8))))
-            else:
-                times = schedule.parse_times(form.get("scan_times", ""))
-                if not times:
-                    raise ValueError("Give at least one scan time")
-                settings["scan_times"] = times
-            settings["apply_gap_seconds"] = max(60, int(float(form.get("apply_gap_minutes", 2.5)) * 60))
-            tz = form.get("timezone", settings["timezone"]).strip() or settings["timezone"]
-            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
+            valid = {value for value, _ in schedule.TIME_SLOTS}
+            notify = form.get("notify_time", "")
+            count = int(form.get("scan_count", 0))
+            times = sorted({form.get(f"scan_{i}", "") for i in range(1, count + 1)} - {""})
+            if notify not in valid or not times or not set(times) <= valid or not 1 <= count <= schedule.MAX_SCANS:
+                raise ValueError("Pick a notification time and at least one scan time")
+            tz = form.get("timezone", settings["timezone"])
             try:
                 ZoneInfo(tz)
             except (ZoneInfoNotFoundError, ValueError):
                 raise ValueError(f"'{tz}' isn't a time zone name like America/New_York")
-            settings["timezone"] = tz
+            settings.update(notify_time=notify, scan_times=times, timezone=tz,
+                            apply_gap_seconds=max(60, int(form.get("apply_gap_minutes", 2)) * 60))
         except ValueError as exc:
             return go(f"/schedule?msg={exc}")
         config.save_settings(settings, p)
         history.commit(p, "Settings: schedule")
         applied = schedule.resync_if_mine(p)
-        return go("/schedule?msg=" + ("Saved and live" if applied else "Saved (schedule not installed here)"))
+        note = f"{len(times)} scan{'s' if len(times) != 1 else ''} a day"
+        return go(f"/schedule?msg=Saved: {note}" + (", live now" if applied else " (schedule not installed here)"))
 
     @app.get("/applications", response_class=HTMLResponse)
     def applications(request: Request):
