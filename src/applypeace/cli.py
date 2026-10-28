@@ -307,7 +307,7 @@ def _scheduled(step: str, fn, p: config.Paths) -> int:
 def cmd_cycle(args, p: config.Paths) -> int:
     from .pipeline import cycle
 
-    return _scheduled("cycle", lambda: cycle(p, log=_out), p)
+    return _scheduled("cycle", lambda: cycle(p, log=_out, trigger="manual" if args.manual else "scheduled"), p)
 
 
 def cmd_digest(args, p: config.Paths) -> int:
@@ -559,7 +559,9 @@ def build_parser() -> argparse.ArgumentParser:
     hs.add_argument("--port", type=int, default=8766)
     hs.set_defaults(func=cmd_h1b_serve)
 
-    sub.add_parser("cycle", help="scan, rank and prepare the review batch (scheduled every 8 h)").set_defaults(func=cmd_cycle)
+    cy = sub.add_parser("cycle", help="scan, rank and prepare the review batch")
+    cy.add_argument("--manual", action="store_true", help="record this run as started by hand")
+    cy.set_defaults(func=cmd_cycle)
     dg = sub.add_parser("digest", help="send the daily 'batch ready' notification")
     dg.add_argument("--force", action="store_true")
     dg.set_defaults(func=cmd_digest)

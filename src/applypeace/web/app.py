@@ -432,6 +432,17 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         note = f"{len(times)} scan{'s' if len(times) != 1 else ''} a day"
         return go(f"/schedule?msg=Saved: {note}" + (", live now" if applied else " (schedule not installed here)"))
 
+    @app.get("/activity", response_class=HTMLResponse)
+    def activity(request: Request):
+        from .. import schedule
+        from ..activity import entries
+
+        names = {c["key"]: c["name"] for c in reg.load(p).values()}
+        tz = schedule.zones_of(config.load_settings(p))[1]
+        with connect(p.db) as conn:
+            items = entries(conn, names, tz)
+        return render(request, "activity.html", items=items, tz=tz)
+
     @app.get("/applications", response_class=HTMLResponse)
     def applications(request: Request):
         with connect(p.db) as conn:

@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% set title = "Activity" %}
+{% block body %}
+<style>
+  .act .when { font-size: .8rem; color: var(--muted); }
+  .act .tag { display:inline-block; font-size:.72rem; padding:1px 8px; border-radius:999px; border:1px solid var(--line); margin-right:4px; }
+  .act .tag.yes { color: var(--accent); border-color: var(--accent); }
+  .act .tag.no { color: var(--warn); border-color: var(--warn); }
+  .act ul { list-style:none; padding:0; margin:8px 0 0; }
+  .act li { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-top:1px solid var(--line); font-size:.9rem; }
+  .act li a { color: inherit; }
+  .act .done { color: var(--accent); white-space:nowrap; } .act .wait { color: var(--warn); white-space:nowrap; }
+  .act .gone { color: var(--muted); white-space:nowrap; }
+</style>
+<p><a href="/">← Back</a></p>
+<h1>Activity</h1>
+<p class="muted small">Times in {{ tz }}. Newest first.</p>
+<div class="act">
+{% for e in items %}
+<div class="card">
+  <div class="when">{{ e.at }}</div>
+  <strong>{{ e.title }}</strong>
+  {% if e.summary %}<div class="small">{{ e.summary }}</div>{% endif %}
+  <div style="margin-top:6px">
+    {% if e.added is not none %}<span class="tag">{{ e.added }} added to your batch</span>{% endif %}
+    {% if e.notified is sameas true %}<span class="tag yes">Notified you</span>
+    {% elif e.notified is sameas false %}<span class="tag no">Notification not delivered</span>
+    {% elif e.kind == 'cycle' %}<span class="tag">No notification{{ ' (nothing new)' if not e.added }}</span>{% endif %}
+  </div>
+  {% for err in e.errors %}<div class="muted small">Couldn't read: {{ err }}</div>{% endfor %}
+  {% if e.jobs %}<ul>
+  {% for j in e.jobs %}<li><a href="/jobs/{{ j.id }}">{{ j.title }}{% if j.company %} · {{ j.company }}{% endif %}</a>
+  <span class="{{ j.action[1] }}">{{ j.action[0] }}</span></li>{% endfor %}
+  </ul>{% endif %}
+</div>
+{% else %}<p class="muted">Nothing yet. The next scan will appear here.</p>{% endfor %}
+</div>
+{% endblock %}

@@ -143,3 +143,23 @@ def test_after_scan_mode_notifies_only_when_jobs_are_added(client, monkeypatch):
         conn.commit()
     pipeline.digest(p, force=True, new_jobs=1)
     assert sent == ["1 new job to review (1 in your batch)."]
+
+
+def test_activity_log_shows_scans_notifications_and_your_actions(client):
+    import json
+
+    from applypeace.db import connect, log_event, now
+
+    c, p = client
+    with connect(p.db) as conn:
+        for jid, status in (("x:a:1", "approved"), ("x:a:2", "queued")):
+            conn.execute("INSERT INTO jobs (id, company_key, ats, board, ats_job_id, title, url, first_seen, last_seen, status)"
+                         " VALUES (?,?,?,?,?,?,?,?,?,?)", (jid, "acme", "x", "a", jid[-1], f"Analyst {jid[-1]}", "u", now(), now(), status))
+        log_event(conn, "cycle", detail={"trigger": "scheduled", "boards": 5, "new": 12, "passed": 3, "judged": 3,
+                                         "queued": ["x:a:1", "x:a:2"], "notified": True, "message": "2 new jobs"})
+        log_event(conn, "cycle", detail={"trigger": "manual", "boards": 5, "new": 0, "passed": 0, "judged": 0, "queued": []})
+        conn.commit()
+    html = c.get("/activity").text
+    assert "Scheduled scan" in html and "Manual scan" in html and "Notified you" in html
+    assert "No notification (nothing new)" in html and "You approved" in html and "Waiting for you" in html
+    assert "Analyst 2" in html

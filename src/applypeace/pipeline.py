@@ -9,7 +9,7 @@ from datetime import date
 from . import profile
 from .companies import registry as reg
 from .config import Paths, load_settings, save_settings
-from .db import connect, log_event
+from .db import connect, log_event, now
 from .discover import discover
 from .notify import notify
 from .prepare import prepare_queue
@@ -39,10 +39,15 @@ def require_setup(p: Paths) -> None:
         raise SetupIncomplete("Setup isn't finished: " + "; ".join(missing))
 
 
-def cycle(p: Paths, log=print) -> dict:
-    """Scan official boards, rank, fill the review batch and draft its answers."""
+def cycle(p: Paths, log=print, trigger: str = "scheduled") -> dict:
+    """Scan official boards, rank, fill the review batch and draft its answers.
+
+    Every run leaves one "cycle" event for the Activity log: what was scanned,
+    which jobs were added, and whether you were notified.
+    """
     require_setup(p)
     settings = load_settings(p)
+    started = now()
     with connect(p.db) as conn:
         found = discover(conn, reg.enabled(reg.load(p), settings))
         log(f"Scanned {found.boards} boards: {found.new} new jobs, {found.closed} closed.")
@@ -51,17 +56,25 @@ def cycle(p: Paths, log=print) -> dict:
         queued = select_batch(p, conn)
         prepared = prepare_queue(p, conn, log=log)
         log(f"Added {len(queued)} jobs to your review batch.")
-        log_event(conn, "cycle", detail={"new": found.new, "queued": len(queued), **prepared})
-        conn.commit()
     from .backup import backup
 
     log(backup(p, "After scan"))
+    sent: dict = {}
     if load_settings(p).get("notify_mode", "after_scan") == "after_scan" and queued:
-        log(digest(p, force=True, new_jobs=len(queued)) or "")
+        log(digest(p, force=True, new_jobs=len(queued), result=sent) or "")
+    detail = {
+        "trigger": trigger, "started": started, "boards": found.boards, "seen": found.seen, "new": found.new,
+        "closed": found.closed, "passed": ranked.candidates, "judged": ranked.judged, "queued": queued,
+        "errors": found.errors[:5], "notified": sent.get("sent"), "message": sent.get("message"),
+        **{k: v for k, v in prepared.items() if k != "prepared"},
+    }
+    with connect(p.db) as conn:
+        log_event(conn, "cycle", detail=detail)
+        conn.commit()
     return {"new": found.new, "queued": len(queued), **prepared}
 
 
-def digest(p: Paths, force: bool = False, new_jobs: int = 0) -> str | None:
+def digest(p: Paths, force: bool = False, new_jobs: int = 0, result: dict | None = None) -> str | None:
     """Send the "batch ready" notification, if there's anything to review.
 
     Called right after a scan that added jobs (notify_mode "after_scan"), or once
@@ -88,7 +101,13 @@ def digest(p: Paths, force: bool = False, new_jobs: int = 0) -> str | None:
     if stuck:
         parts.append(f"{stuck} waiting for you to finish")
     message = ", ".join(parts) + "."
-    notify(message, open_url=settings.get("review_url") or None)
+    ok = notify(message, open_url=settings.get("review_url") or None)
+    if result is not None:
+        result.update(sent=bool(ok), message=message)
+    if not new_jobs:  # the daily summary gets its own log entry; after-scan alerts live on the scan's entry
+        with connect(p.db) as conn:
+            log_event(conn, "notify", detail={"sent": bool(ok), "message": message})
+            conn.commit()
     settings["last_digest"] = date.today().isoformat()
     save_settings(settings, p)
     return message
