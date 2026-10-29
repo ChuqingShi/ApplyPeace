@@ -13,11 +13,13 @@
 <p><a href="/">← Back</a></p>
 <h1>Schedule</h1>
 {% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
-<div class="card warn" id="tz-banner" hidden>
-Your device is set to <strong id="tz-device"></strong>.
+<div class="card" id="tz-banner" hidden>
+It looks like you're opening this page from the <strong id="tz-device"></strong> time zone.
+Your times below stay as they are unless you switch.
 <div class="tz-actions">
-<button type="button" class="secondary" data-target="notify-tz" id="tz-notify-btn">Use for notifications</button>
-<button type="button" class="secondary" data-target="scan-tz" id="tz-scan-btn">Use for scans</button>
+<button type="button" class="secondary" data-target="scan-tz" id="tz-scan-btn">Use <span class="tz-name"></span> time for scans</button>
+<button type="button" class="secondary" data-target="notify-tz" id="tz-notify-btn">Use <span class="tz-name"></span> time for notifications</button>
+<button type="button" class="secondary" id="tz-keep">No, keep my times</button>
 </div></div>
 <form method="post" action="/schedule" id="schedule-form" class="sched">
 <input type="hidden" name="_token" value="{{ token }}">
@@ -89,7 +91,8 @@ Your device is set to <strong id="tz-device"></strong>.
 
   var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
   var current = { "notify-tz": {{ notify_tz | tojson }}, "scan-tz": {{ scan_tz | tojson }} };
-  if (!device) return;
+  var names = {{ zone_names | tojson }};
+  if (!device || localStorage.getItem("tz-keep") === device) return;  // "keep my times" is remembered per zone
   var any = false;
   ["notify-tz", "scan-tz"].forEach(function (id) {
     var btn = document.querySelector('[data-target="' + id + '"]');
@@ -104,7 +107,13 @@ Your device is set to <strong id="tz-device"></strong>.
     };
   });
   if (!any) return;
-  document.getElementById("tz-device").textContent = device;
+  var name = names[device] || device.split("/").pop().replace(/_/g, " ");
+  document.getElementById("tz-device").textContent = name;
+  document.querySelectorAll(".tz-name").forEach(function (s) { s.textContent = name; });
+  document.getElementById("tz-keep").onclick = function () {
+    localStorage.setItem("tz-keep", device);
+    document.getElementById("tz-banner").hidden = true;
+  };
   document.getElementById("tz-banner").hidden = false;
 })();
 </script>

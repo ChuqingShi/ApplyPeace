@@ -452,7 +452,7 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
         times = settings.get("scan_times") or schedule.scan_times(settings["notify_time"], settings["scan_interval_hours"])
         return render(request, "schedule.html", msg=msg, scan_list=times, slots=schedule.TIME_SLOTS,
                       max_scans=schedule.MAX_SCANS, notify_tz=schedule.zones_of(settings)[0],
-                      scan_tz=schedule.zones_of(settings)[1],
+                      scan_tz=schedule.zones_of(settings)[1], zone_names=dict(schedule.COMMON_ZONES),
                       notify_zones=schedule.common_zones(schedule.zones_of(settings)[0]),
                       scan_zones=schedule.common_zones(schedule.zones_of(settings)[1]),
                       gaps=[1, 2, 3, 5, 10, 15, 30, 60])
