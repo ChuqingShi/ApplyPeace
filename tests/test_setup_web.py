@@ -109,7 +109,7 @@ def test_schedule_page_saves_custom_times(client):
     c, p = client
     html = c.get("/schedule").text
     assert 'name="scan_count"' in html and "7:30 AM" in html and 'id="tz-banner"' in html
-    assert "No, keep my times" in html and '"Pacific/Honolulu": "Hawaii"' in html
+    assert "tz-status" in html and '"Pacific/Honolulu": "Hawaii"' in html
     t = token(html)
     c.post("/schedule", data={"_token": t, "notify_timezone": "America/New_York", "notify_time": "07:00",
                               "scan_timezone": "Asia/Tokyo", "scan_count": "4", "notify_mode": "daily", "scan_1": "06:30", "scan_2": "12:00", "scan_3": "18:00",

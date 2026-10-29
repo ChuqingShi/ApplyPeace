@@ -14,12 +14,10 @@
 <h1>Schedule</h1>
 {% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
 <div class="card" id="tz-banner" hidden>
-It looks like you're opening this page from the <strong id="tz-device"></strong> time zone.
-Your times below stay as they are unless you switch.
+This device is in the <strong id="tz-device"></strong> time zone. <span id="tz-status"></span>
 <div class="tz-actions">
 <button type="button" class="secondary" data-target="scan-tz" id="tz-scan-btn">Use <span class="tz-name"></span> time for scans</button>
 <button type="button" class="secondary" data-target="notify-tz" id="tz-notify-btn">Use <span class="tz-name"></span> time for notifications</button>
-<button type="button" class="secondary" id="tz-keep">No, keep my times</button>
 </div></div>
 <form method="post" action="/schedule" id="schedule-form" class="sched">
 <input type="hidden" name="_token" value="{{ token }}">
@@ -92,13 +90,11 @@ Your times below stay as they are unless you switch.
   var device = Intl.DateTimeFormat().resolvedOptions().timeZone;
   var current = { "notify-tz": {{ notify_tz | tojson }}, "scan-tz": {{ scan_tz | tojson }} };
   var names = {{ zone_names | tojson }};
-  if (!device || localStorage.getItem("tz-keep") === device) return;  // "keep my times" is remembered per zone
-  var any = false;
+  if (!device) return;
   ["notify-tz", "scan-tz"].forEach(function (id) {
     var btn = document.querySelector('[data-target="' + id + '"]');
     var dailyOnly = id === "notify-tz" && {{ (settings.notify_mode != 'daily') | tojson }};
     if (current[id] === device || dailyOnly) { btn.hidden = true; return; }
-    any = true;
     btn.onclick = function () {
       var sel = document.getElementById(id);
       if (!Array.from(sel.options).some(function (o) { return o.value === device; })) sel.add(new Option(device, device));
@@ -106,15 +102,14 @@ Your times below stay as they are unless you switch.
       document.getElementById("schedule-form").submit();
     };
   });
-  if (!any) return;
-  var name = names[device] || device.split("/").pop().replace(/_/g, " ");
+  var label = function (z) { return names[z] || z.split("/").pop().replace(/_/g, " "); };
+  var name = label(device);
   document.getElementById("tz-device").textContent = name;
+  document.getElementById("tz-status").textContent = current["scan-tz"] === device
+    ? "Scans run on this time zone too."
+    : "Scans run on " + label(current["scan-tz"]) + " time and stay that way unless you switch.";
   document.querySelectorAll(".tz-name").forEach(function (s) { s.textContent = name; });
-  document.getElementById("tz-keep").onclick = function () {
-    localStorage.setItem("tz-keep", device);
-    document.getElementById("tz-banner").hidden = true;
-  };
-  document.getElementById("tz-banner").hidden = false;
+  document.getElementById("tz-banner").hidden = false;  // always shown, so you can switch at any time
 })();
 </script>
 {% endblock %}
