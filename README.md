@@ -75,7 +75,70 @@ appear in it in order, with at most one extra word between them. So "AI Engineer
 "Applied AI Engineer" but not "Engineer, AI".
 
 The titles that pass then go to the AI scorer, which reads the whole posting against your resumes
-(step 5 above). That is the only step that uses a larger model, within your daily limit.
+(step 5 above), within your daily limit. See [Where AI is used](#where-ai-is-used-and-how-to-control-it).
+
+## Where AI is used, and how to control it
+
+AI is optional. Every step below has a free fallback, so ApplyPeace also works with AI switched off.
+
+### Steps that use AI
+
+| Step | When it runs | Model | What is sent | Without AI |
+|---|---|---|---|---|
+| Reading a resume | Once per uploaded resume | Main | The resume's text | Picks out contact details; you fill in the rest |
+| Suggesting roles | Only when you tap "Suggest roles from my resumes" | Main | All your resumes and current roles | You type your roles |
+| Search plan | Once per change to your roles or level, at the start of a scan | Main | Your roles and resumes | Your roles are the search words |
+| Title screening | Each scan, only for new titles that pass the free filters | Screening (Haiku) | Job titles, your roles and a one-line summary of you | Word matching |
+| Scoring jobs (1–5) | Each scan, up to your daily limit, four at a time | Main | The posting, your resumes, visa needs, roles, level, locations and learned preferences | Ranked by keyword score |
+| Essay drafts | When a job with free-text questions enters your batch | Main | The posting and your profile | Left blank for you |
+| Redraft | Only when you tap "Redraft with AI" | Main | The draft and your instruction | — |
+
+### Steps that never use AI
+
+- **Finding jobs:**
+  - matching companies to their job sites;
+  - reading Greenhouse, Ashby, Lever and Workday;
+  - H-1B lookups.
+- **Free filters:**
+  - company lists;
+  - location;
+  - level;
+  - excluded words;
+  - posting age;
+  - "won't sponsor" wording;
+  - duplicate roles.
+- **Keyword pre-ranking:** done before any AI scoring.
+- **Application forms:**
+  - reading the questions;
+  - filling answers from your profile and saved defaults.
+- **Approving and applying:**
+  - the approval lock;
+  - filling and submitting forms in the browser.
+- **Running the system:**
+  - notifications;
+  - the schedule;
+  - backups.
+
+### How the AI is called
+
+- **Through your own Claude account:** every request goes through the Claude Code CLI (`claude -p`), using your own Claude login and plan. There is no separate API key, and usage counts against your Claude plan.
+- **It can only return data:** each request has no tools and must return data matching a fixed schema. The model cannot browse, run commands or touch files.
+- **Timeouts:** a request that takes longer than 3 minutes is dropped. That step then uses its fallback.
+
+### Your controls
+
+| Control | Where | Default |
+|---|---|---|
+| AI on or off | Profile & settings → first page, "AI help" | Off until you choose |
+| Main model (scoring, essays, resumes, search plan, role suggestions) | Same page, when AI is on | Sonnet |
+| Screening model (title screening) | Same page | Haiku |
+| Jobs the AI scores per day | Profile & settings → "What to look for" | 30 |
+| Minimum AI fit score for your batch | Same page | 3 out of 5 |
+
+- **Models:** you can choose Haiku (fastest and cheapest), Sonnet (balanced) or Opus (most capable and slowest).
+- **Daily limit:** the scoring limit resets at midnight UTC, which is 5 PM Pacific in summer.
+- **Unscored jobs:** jobs not scored yet wait for a later scan. They never enter your batch unscored.
+- **Settings file:** all of these settings live in `personal/settings.yml`, under `llm` and `min_fit_score`.
 
 ## Quick start
 

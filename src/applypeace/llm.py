@@ -13,6 +13,10 @@ import subprocess
 from .config import Paths, load_settings
 
 
+# Claude model aliases the settings page offers, cheapest first.
+MODELS = {"haiku": "Haiku (fastest, cheapest)", "sonnet": "Sonnet (balanced)", "opus": "Opus (most capable, slowest)"}
+
+
 class LLMUnavailable(RuntimeError):
     """The LLM is not consented to, not installed, or failed."""
 

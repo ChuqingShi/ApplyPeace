@@ -10,6 +10,12 @@
 <span>Yes, use Claude <span class="hint">to read your resume, pick jobs and draft essay answers. Your resume and job descriptions are sent to Anthropic through your Claude Code account.</span></span></label>
 <label class="choice"><input type="radio" name="llm_consent" value="no" {{ 'checked' if not settings.llm.consent }}>
 <span>No AI <span class="hint">You fill in details yourself; jobs are ranked by keywords only.</span></span></label>
+{% if settings.llm.consent %}
+<label>Model for scoring jobs, essays and reading resumes</label>
+<select name="llm_model">{% for k, v in models.items() %}<option value="{{ k }}" {{ 'selected' if settings.llm.model == k }}>{{ v }}</option>{% endfor %}</select>
+<label>Model for screening job titles <span class="hint">hundreds of short titles at a time; the cheapest model is enough</span></label>
+<select name="llm_screen_model">{% for k, v in models.items() %}<option value="{{ k }}" {{ 'selected' if settings.llm.screen_model == k }}>{{ v }}</option>{% endfor %}</select>
+{% endif %}
 
 <h2>Submitting</h2>
 <label class="choice"><input type="radio" name="submit_mode" value="fill_only" {{ 'checked' if settings.submit_mode != 'auto' }}>

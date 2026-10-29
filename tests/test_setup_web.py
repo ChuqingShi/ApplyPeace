@@ -329,3 +329,15 @@ def test_pause_scans_skips_scheduled_scans_but_not_scan_now(client, monkeypatch)
     monkeypatch.setattr(pipeline, "_cycle", lambda p, log, trigger: ran.append(trigger) or {})
     pipeline.cycle(p, log=lambda *a: None, trigger="manual")
     assert ran == ["manual"]
+
+
+def test_choose_ai_models(client):
+    c, p = client
+    t = token(c.get("/setup").text)
+    c.post("/setup/choices", data={"_token": t, "llm_consent": "yes"})
+    html = c.get("/setup").text
+    assert 'name="llm_model"' in html and 'name="llm_screen_model"' in html
+    c.post("/setup/choices", data={"_token": t, "llm_consent": "yes", "llm_model": "opus", "llm_screen_model": "gpt-9"})
+    llm = config.load_settings(p)["llm"]
+    assert llm["model"] == "opus" and llm["screen_model"] == "haiku"  # unknown names are ignored
+

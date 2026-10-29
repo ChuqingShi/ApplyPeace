@@ -153,7 +153,8 @@ DEFAULT_SETTINGS: dict = {
     "scan_interval_hours": 8,
     "scan_times": [],  # custom daily scan times ("HH:MM"); empty = derived from notify_time + interval
     "max_posting_age_days": 30,
-    "llm": {"consent": False, "judge_daily_limit": 30, "screen_model": "haiku"},
+    # AI: "model" for the careful work (scoring, essays, resumes), "screen_model" for title screening.
+    "llm": {"consent": False, "model": "sonnet", "screen_model": "haiku", "judge_daily_limit": 30},
     "submit_mode": "fill_only",  # fill_only (dry run, nothing sent) | auto
     "paused": False,  # hold approved applications instead of submitting them
     "scans_paused": False,  # skip scheduled scans (Scan now still works)

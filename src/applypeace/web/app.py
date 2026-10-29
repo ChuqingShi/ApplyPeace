@@ -93,14 +93,21 @@ def create_app(p: config.Paths | None = None) -> FastAPI:
 
     @app.get("/setup", response_class=HTMLResponse)
     def setup_start(request: Request):
+        from ..llm import MODELS
+
         return render(request, "setup_choices.html", step="choices", missing=profile.completeness(p),
-                      ans=profile.load_answers(p))
+                      ans=profile.load_answers(p), models=MODELS)
 
     @app.post("/setup/choices")
     async def setup_choices(request: Request):
         form = await check(request)
         settings = config.load_settings(p)
+        from ..llm import MODELS
+
         settings["llm"]["consent"] = form.get("llm_consent") == "yes"
+        for key in ("model", "screen_model"):
+            if form.get(f"llm_{key}") in MODELS:
+                settings["llm"][key] = form.get(f"llm_{key}")
         settings["submit_mode"] = "auto" if form.get("submit_mode") == "auto" else "fill_only"
         settings["h1b_filter"] = form.get("h1b_filter") == "yes"
         settings["backup_requested"] = form.get("backup") == "yes"
