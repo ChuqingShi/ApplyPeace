@@ -213,7 +213,7 @@ def test_scan_now_starts_a_manual_scan_and_always_notifies(client, monkeypatch):
 
     sent = []
     monkeypatch.setattr(pipeline, "notify", lambda msg, **k: sent.append(msg) or True)
-    monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None, wanted=None: DiscoverResult())
+    monkeypatch.setattr(pipeline, "discover", lambda conn, companies, titles=None, wanted=None, words=None: DiscoverResult())
     monkeypatch.setattr(pipeline, "rank", lambda p, conn, log, progress=None: RankResult())
     monkeypatch.setattr(pipeline, "select_batch", lambda p, conn: [])
     monkeypatch.setattr(pipeline, "prepare_queue", lambda p, conn, log: {"prepared": 0})
@@ -308,9 +308,9 @@ def test_ai_title_suggestions_show_as_chips(client, monkeypatch):
         {"title": "Statistician", "why": "stats", "fit": "stretch"}]})
     t = token(c.get("/setup/targets").text)
     r = c.post("/setup/targets/suggest", data={"_token": t}, follow_redirects=False)
-    assert "suggested%202%20titles" in r.headers["location"]
+    assert "suggested%202%20roles" in r.headers["location"]
     html = c.get("/setup/targets").text
-    assert "Analytics Engineer" in html and "Stretch" in html and "dbt work" in html
+    assert "Analytics Engineer" in html and "Tap to add" in html
     s["targets"]["titles"].append("Statistician")
     config.save_settings(s, p)
     assert [t["title"] for t in titles.saved(p)] == ["Analytics Engineer"]  # added titles drop out of the list

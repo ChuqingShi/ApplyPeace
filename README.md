@@ -12,34 +12,70 @@ An AI shortlists them, you approve from your phone, and it applies.
 1. **Company lists you choose.** Switch the lists on or off; a job qualifies if its employer is on
    any list that's on. ApplyPeace matches each company to its own official job board and only
    accepts a board whose owner name really matches the company.
-2. **Scan every 8 hours.** Jobs come straight from the employers' Greenhouse, Ashby and Lever
-   boards. They are never scraped from LinkedIn or Indeed.
-3. **H-1B evidence.** Each employer's certified H-1B filings come from public Department of Labor
+2. **Scans at times you choose.** Jobs come straight from the employers' own Greenhouse, Ashby,
+   Lever and Workday sites. They are never scraped from LinkedIn or Indeed. Tap Scan now for an
+   extra scan at any time.
+3. **Finding your roles.** See [How job matching works](#how-job-matching-works).
+4. **H-1B evidence.** Each employer's certified H-1B filings come from public Department of Labor
    LCA data. With the H-1B filter on, employers without a recent record are skipped, and so are
    postings that say they won't sponsor.
-4. **AI shortlist.** Free filters and keyword ranking pick the best ~30 new jobs. Claude then scores
+5. **AI shortlist.** Free filters and keyword ranking pick the best new jobs, up to your daily
+   limit (30 by default). Claude then scores
    each one 1–5, explains why it fits (quoting your resume) and lists its concerns.
-5. **Answers prepared in advance.** ApplyPeace reads every application question before any browser
+6. **Answers prepared in advance.** ApplyPeace reads every application question before any browser
    opens and drafts the answers:
    - from your profile and standard answers;
    - from defaults you saved earlier;
    - essays from AI drafts.
 
    Anything personal it can't know is left for you.
-6. **You approve on your phone.** On the private phone page you can:
+7. **You approve on your phone.** On the private phone page you can:
    - edit any answer;
    - redraft essays;
    - pick which resume to send;
    - approve, skip or reject with a reason, so the picker learns your taste.
 
    Approval locks the exact answers and resume you saw; any later change needs a new approval.
-7. **It applies.**
-   - Applications go out one at a time, with a daily cap and a Pause button.
+8. **It applies.**
+   - Applications go out one at a time, with a daily cap and a Hold sending button.
+   - Workday jobs are the exception: Workday needs an account with each company, so you apply on
+     the site yourself and tap "I applied" to record it.
    - Each one is recorded with screenshots of the filled form and the confirmation page, the exact
      answers, the job description and the date.
    - CAPTCHAs, emailed codes and unfamiliar pages are handed to you; ApplyPeace never tries to get
      around them.
    - For an emailed code, you type it on the phone page and ApplyPeace finishes the application.
+
+## How job matching works
+
+You list a few **roles** you want, such as Data Scientist or Machine Learning Engineer. A short
+list is enough. ApplyPeace turns it into a search in three steps, using a little AI:
+
+1. **Search plan, made once per change.** When your roles or level change, one AI request reads
+   your resumes and roles. It writes a one-line summary of your background and picks two to six
+   broad search phrases, such as "data scientist", "machine learning" and "quantitative". The
+   plan is saved in `personal/search_plan.yml`, and the targets page shows its phrases.
+2. **Collecting postings.**
+   - Greenhouse, Ashby and Lever sites publish every job at once, so ApplyPeace reads them all.
+   - Workday sites are too big for that, so ApplyPeace types each search phrase into the site's
+     own search box. It keeps titles that loosely match (every word of a phrase, in any order)
+     and stops paging once a page has none.
+3. **Title screening, cheap and saved.**
+   - Before any title is screened, the free filters run: company list, location, level, excluded
+     words, posting age and sponsorship. Only jobs that pass them have their titles checked.
+   - Titles nobody has screened yet go to Claude's smallest model (Haiku) in batches of 500. It
+     answers which ones fit your roles, including other names for the same job, such as
+     "Scientist, Machine Learning" or "Quant Researcher".
+   - Every answer is saved in the database (the `title_screen` table), so each title is asked
+     about only once. A typical scan sends one small request. Changing your roles or level starts
+     the screening afresh.
+
+Without AI, both steps fall back to word matching. A title matches a role when the role's words
+appear in it in order, with at most one extra word between them. So "AI Engineer" matches
+"Applied AI Engineer" but not "Engineer, AI".
+
+The titles that pass then go to the AI scorer, which reads the whole posting against your resumes
+(step 5 above). That is the only step that uses a larger model, within your daily limit.
 
 ## Quick start
 

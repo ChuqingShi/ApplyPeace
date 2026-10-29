@@ -105,8 +105,12 @@ def _age_days(posted_at: str | None, first_seen: str) -> float:
     return (datetime.now(timezone.utc) - when) / timedelta(days=1)
 
 
-def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict | None) -> str | None:
-    """Return a filter reason, or None if the job passes."""
+def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict | None, title_ok=None) -> str | None:
+    """Return a filter reason, or None if the job passes.
+
+    `title_ok(title)` says whether a title fits your roles (the AI screener's answer);
+    without it, a title fits when a role's words appear in it in order.
+    """
     targets = settings["targets"]
     if job["company_key"] not in enabled_keys:
         return "company list switched off"
@@ -124,7 +128,7 @@ def decide(job: sqlite3.Row, settings: dict, enabled_keys: set[str], h1b: dict |
         loc = (job["location"] or "").lower()
         if not any(l.lower() in loc for l in targets["locations"]):
             return "not in preferred locations"
-    if targets["titles"] and not title_matches(job["title"], targets["titles"]):
+    if targets["titles"] and not (title_ok(job["title"]) if title_ok else title_matches(job["title"], targets["titles"])):
         return "title not targeted"
     if targets["exclude_titles"] and title_matches(job["title"], targets["exclude_titles"], max_gap=0):
         return "excluded title word"
@@ -155,6 +159,27 @@ def worth_reading(settings: dict):
     return check
 
 
+def title_checker(conn: sqlite3.Connection, settings: dict):
+    """The AI screener's saved answer for a title, or word matching for titles it hasn't seen."""
+    from ..search import norm, roles_key, verdicts
+
+    answers = verdicts(conn, roles_key(settings))
+    titles = settings["targets"]["titles"]
+
+    def ok(title: str) -> bool:
+        answer = answers.get(norm(title))
+        return answer if answer is not None else title_matches(title, titles)
+
+    return ok
+
+
+def needs_screening(conn: sqlite3.Connection, settings: dict, enabled_keys: set[str], h1b_by_company: dict) -> list[str]:
+    """Titles of jobs that pass every filter except the title one: only these are worth asking the AI about."""
+    rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(RECHECK))})", RECHECK).fetchall()
+    return [j["title"] for j in rows
+            if decide(j, settings, enabled_keys, h1b_by_company.get(j["company_key"]), title_ok=lambda t: True) is None]
+
+
 def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[str], h1b_by_company: dict) -> dict:
     """Set every reviewable job to 'candidate' or 'filtered'. Returns counts by reason.
 
@@ -169,8 +194,9 @@ def apply_filters(conn: sqlite3.Connection, settings: dict, enabled_keys: set[st
     # Batch jobs first, then the oldest posting, so the copy you already have is the one kept.
     rows = conn.execute(f"SELECT * FROM jobs WHERE status IN ({','.join('?' * len(RECHECK))})"
                         " ORDER BY status != 'queued', first_seen, id", RECHECK).fetchall()
+    title_ok = title_checker(conn, settings)
     for job in rows:
-        reason = decide(job, settings, enabled_keys, h1b_by_company.get(job["company_key"]))
+        reason = decide(job, settings, enabled_keys, h1b_by_company.get(job["company_key"]), title_ok)
         role = role_key(job["company_key"], job["title"])
         if not reason and role in applied:
             reason = ALREADY_APPLIED

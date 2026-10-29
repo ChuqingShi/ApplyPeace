@@ -85,6 +85,13 @@ CREATE TABLE IF NOT EXISTS events (
     job_id  TEXT,
     detail  TEXT
 );
+-- The AI title screener's answers: does this job title fit your roles? (see search.py)
+CREATE TABLE IF NOT EXISTS title_screen (
+    title     TEXT PRIMARY KEY,  -- normalised job title
+    roles_key TEXT NOT NULL,     -- the roles and level it was screened for
+    fit       INTEGER NOT NULL,
+    at        TEXT NOT NULL
+);
 """
 
 

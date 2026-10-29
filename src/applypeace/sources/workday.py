@@ -1,8 +1,9 @@
 """Workday career sites (<tenant>.<pod>.myworkdayjobs.com), read through the JSON the site itself uses.
 
 A board is "<tenant>.<pod>.<site>", e.g. "nvidia.wd5.NVIDIAExternalCareerSite".
-Big employers list thousands of jobs, so a scan searches for your target titles
-instead of paging through everything, and stops paging once results stop matching.
+Big employers list thousands of jobs, so a scan types a few broad words from your
+search plan into the site's search box (or each of your roles, without a plan),
+keeps titles that loosely match, and stops paging once results stop matching.
 """
 
 from __future__ import annotations
@@ -80,18 +81,27 @@ def _job(board: str, raw: dict) -> Job:
     )
 
 
-def list_jobs(client: httpx.Client, board: str, titles: list[str] | None = None) -> list[Job]:
-    from ..rank.filters import title_matches
+def loosely_matches(title: str, titles: list[str], words: list[str]) -> bool:
+    """Worth keeping for the AI screener: a role matches, or every word of a search phrase is in the title."""
+    from ..rank.filters import _words, title_matches
 
+    have = _words(title)
+    return title_matches(title, titles) or any(_words(w) <= have for w in words if w.strip())
+
+
+def list_jobs(client: httpx.Client, board: str, titles: list[str] | None = None,
+              words: list[str] | None = None) -> list[Job]:
+    """Search the site for each search phrase (from your search plan, else your roles)."""
+    titles, words = titles or [], [w for w in (words or []) if w.strip()]
     found: dict[str, Job] = {}
-    for term in search_terms(titles or []):
+    for term in words or search_terms(titles):
         for page in range(MAX_PAGES):
             resp = client.post(f"{api(board)}/jobs",
                                json={"appliedFacets": {}, "limit": PAGE, "offset": page * PAGE, "searchText": term})
             resp.raise_for_status()
             postings = resp.json().get("jobPostings") or []
             hits = [r for r in postings if r.get("externalPath") and r.get("title")
-                    and (not titles or title_matches(r["title"], titles))]
+                    and (not titles or loosely_matches(r["title"], titles, words))]
             for raw in hits:
                 job = _job(board, raw)
                 found.setdefault(job.id, job)

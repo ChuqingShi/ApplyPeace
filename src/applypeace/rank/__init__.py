@@ -13,7 +13,7 @@ from .. import llm, profile
 from ..companies import registry as reg
 from ..config import Paths, load_settings
 from ..db import log_event
-from .filters import SENIORITY_LEVELS, _age_days, apply_filters
+from .filters import SENIORITY_LEVELS, _age_days, apply_filters, needs_screening
 from .judge import judge_job
 from .keywords import tfidf_scores
 
@@ -28,6 +28,7 @@ class RankResult:
     candidates: int = 0
     judged: int = 0
     judge_errors: int = 0
+    screened: int = 0  # job titles the AI screener answered this run
     queued: list[str] = field(default_factory=list)
 
 
@@ -73,7 +74,13 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print, progress=None) -> RankRe
     records = h1b_records([c for c in companies if c["key"] in with_jobs]) if settings["h1b_filter"] else None
     if settings["h1b_filter"] and records is None:
         log("H-1B database not loaded yet (`ap h1b update`); only the job-text sponsorship check is applied.")
-    result = RankResult(filters=apply_filters(conn, settings, enabled_keys, records or {}))
+    # Stage 1a: the AI screener answers for titles it hasn't seen (only those passing every other filter).
+    from .. import search
+
+    unscreened = needs_screening(conn, settings, enabled_keys, records or {})
+    result_screened = search.screen(p, conn, unscreened, log=log, progress=progress and (
+        lambda done, total: progress(f"Screening new job titles: {done} of {total}")))
+    result = RankResult(filters=apply_filters(conn, settings, enabled_keys, records or {}), screened=result_screened)
 
     candidates = conn.execute("SELECT * FROM jobs WHERE status='candidate'").fetchall()
     result.candidates = len(candidates)
@@ -133,7 +140,7 @@ def rank(p: Paths, conn: sqlite3.Connection, log=print, progress=None) -> RankRe
                 conn.commit()
                 result.judged += 1
                 if progress:
-                    progress(result.judged, len(todo))
+                    progress(f"AI scoring {result.judged} of {len(todo)} jobs")
 
     # Final score for every candidate.
     for job in conn.execute("SELECT * FROM jobs WHERE status='candidate'").fetchall():

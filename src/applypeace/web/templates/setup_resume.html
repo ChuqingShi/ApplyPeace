@@ -7,7 +7,7 @@ You can add more versions (for example "Data analyst" and "Product").</p>
 <div class="card"><strong>Saved resumes</strong>
 <ul class="plain">{% for r in resumes %}<li>{{ r.label }} <span class="muted">({{ r.file }}, added {{ r.added }})</span></li>{% endfor %}</ul>
 {% if settings.llm.consent %}<form method="post" action="/setup/targets/suggest"><input type="hidden" name="_token" value="{{ token }}">
-<button class="secondary small" type="submit" onclick="this.textContent='Reading your resumes… (about 30 seconds)'">Suggest job titles from my resumes</button></form>{% endif %}</div>
+<button class="secondary small" type="submit" onclick="this.textContent='Reading your resumes… (about 30 seconds)'">Suggest roles from my resumes</button></form>{% endif %}</div>
 {% endif %}
 <form method="post" action="/setup/resume" enctype="multipart/form-data">
 <input type="hidden" name="_token" value="{{ token }}">

@@ -29,11 +29,11 @@ class DiscoverResult:
 WORKDAY_DETAILS_PER_SCAN = 300
 
 
-def _fetch(company: dict, titles: list[str]) -> tuple[dict, list[Job] | None, str | None]:
+def _fetch(company: dict, titles: list[str], words: list[str] | None = None) -> tuple[dict, list[Job] | None, str | None]:
     try:
         with http_client() as client:
             if company["ats"] == "workday":  # too big to list in full: search for your titles
-                return company, workday.list_jobs(client, company["board"], titles), None
+                return company, workday.list_jobs(client, company["board"], titles, words), None
             return company, LISTERS[company["ats"]](client, company["board"]), None
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         return company, None, f"{company['name']} ({company['ats']}:{company['board']}): {exc}"
@@ -99,12 +99,12 @@ def upsert_jobs(conn: sqlite3.Connection, company_key: str, jobs: list[Job]) -> 
 
 
 def discover(conn: sqlite3.Connection, companies: list[dict], titles: list[str] | None = None,
-             wanted=None, workers: int = 8) -> DiscoverResult:
+             wanted=None, words: list[str] | None = None, workers: int = 8) -> DiscoverResult:
     result = DiscoverResult()
     boards = [c for c in companies if c.get("ats") in reg.SUPPORTED_ATS and c.get("board") and c.get("verified")]
     stamp = now()
     with cf.ThreadPoolExecutor(workers) as pool:
-        for company, jobs, error in pool.map(lambda c: _fetch(c, titles or []), boards):
+        for company, jobs, error in pool.map(lambda c: _fetch(c, titles or [], words), boards):
             if error:
                 result.errors.append(error)
                 continue

@@ -78,12 +78,16 @@ def _cycle(p: Paths, log, trigger: str) -> dict:
     settings = load_settings(p)
     started = now()
     companies = reg.enabled(reg.load(p), settings)
+    set_status(p, "Updating your search plan")
+    from .search import plan
+
+    words = plan(p, log).get("search_words")
     set_status(p, f"Checking {sum(1 for c in companies if c.get('verified'))} company job sites")
     with connect(p.db) as conn:
-        found = discover(conn, companies, settings["targets"]["titles"], worth_reading(settings))
+        found = discover(conn, companies, settings["targets"]["titles"], worth_reading(settings), words)
         log(f"Scanned {found.boards} boards: {found.new} new jobs, {found.closed} closed.")
         set_status(p, f"Found {found.new} new postings. Filtering")
-        ranked = rank(p, conn, log=log, progress=lambda done, total: set_status(p, f"AI scoring {done} of {total} jobs"))
+        ranked = rank(p, conn, log=log, progress=lambda stage: set_status(p, stage))
         set_status(p, "Preparing your batch")
         log(f"{ranked.candidates} jobs passed the filters; AI judged {ranked.judged}.")
         queued = select_batch(p, conn)
@@ -100,7 +104,7 @@ def _cycle(p: Paths, log, trigger: str) -> dict:
         sent = {"sent": bool(notify(message, open_url=load_settings(p).get("review_url") or None)), "message": message}
     detail = {
         "trigger": trigger, "started": started, "boards": found.boards, "seen": found.seen, "new": found.new,
-        "closed": found.closed, "passed": ranked.candidates, "judged": ranked.judged, "queued": queued,
+        "closed": found.closed, "screened": ranked.screened, "passed": ranked.candidates, "judged": ranked.judged, "queued": queued,
         "errors": found.errors[:5], "notified": sent.get("sent"), "message": sent.get("message"),
         **{k: v for k, v in prepared.items() if k != "prepared"},
     }
